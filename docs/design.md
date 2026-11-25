@@ -42,3 +42,51 @@ hold 有一个截止时间 `expires_at_ms`。到了时间没人付款，库存�
 
 剩下的一到四秒来自：LocalStack 的延迟消息大约晚 0.75 秒才可见；30 条消息分成 3 批，event source mapping 一批一批串行调用。
 这是 LocalStack 上的数，不代表 AWS 上的数。定位过程见 [problems.md 的 q02](problems.md)。
+
+## 2. 访问模式 → 键设计
+
+单表 `stockhold`，按需计费。每个访问模式都是一次 GetItem / Query，没有 Scan（`stockhold/keys.py`，CDK 在 `infra/app.mjs` 锚点 `cdk-table`）。
+
+| 访问模式 | 谁用 | 键 | 操作 |
+|---|---|---|---|
+| 读商品元数据（容量、分片数） | API、报表 | `PK=SKU#<sku>`, `SK=META` | GetItem |
+| 读一个商品的全部库存分片 | reserve（每次尝试前） | `PK=SKU#<sku>`, `SK begins_with SHARD#` | Query（强一致） |
+| 扣 / 还一个分片的库存 | reserve、release、expire | `PK=SKU#<sku>`, `SK=SHARD#<k>` | 事务内条件 Update |
+| 按 id 读写 hold | 所有转移、幂等重放 | `PK=HOLD#<hold_id>`, `SK=HOLD`；`hold_id = sha256(client, Idempotency-Key)` | GetItem、条件 Put / Update |
+| 找过期了还开着的 hold | sweeper | GSI1：`gsi1pk=HELD#<0..3>`, `gsi1sk=expires_at_ms`，**稀疏**（离开 HELD 时 REMOVE） | 4 次 Query（`gsi1sk < now − 5s`） |
+| 一个商品的全部 hold | 库存报表、不变式检查、结账页 | GSI2：`gsi2pk=SKU#<sku>#<k>`, `gsi2sk=created_at_ms` | 每个分片一次 Query |
+| 付款事件的失败记录 | payments Lambda 写、重放工具读 | `PK=FAIL#<message_id>`, `SK=FAIL` | Update（list_append）、GetItem |
+| 死信归档 / 审计 | 重放工具 | `PK=DLQ`, `SK=<archived_at_ms>#<message_id>`；`PK=AUDIT`, `SK=<at_ms>#<id>`；按 message id 找：`PK=DLQIDX#<id>` | Query（倒序）、条件 Update（认领） |
+| 故障开关、用户、教学运行记录 | 演练、登录、教学模式 | `FAULT#<hold_id>`、`USER#<name>`、`LEARN#<run_id>` | GetItem / 条件 Update |
+
+### 热点风险检查
+
+| 键 | 风险 | 处理 |
+|---|---|---|
+| `SKU#<秒杀商品> / SHARD#k` | 开抢那一秒所有写入落在一个 item 上 | 写分片：热门商品 N 个分片，reserve 随机选够这一单的分片（第 3 节实测） |
+| GSI2 | 如果按 `SKU#<sku>` 建索引，秒杀商品的每个 hold 都写同一个索引分区，GSI 被限流会反压基表 | 索引键也带分片号 |
+| GSI1 | 「所有开着的 hold」是一个天然的热分区 | 分成 4 个桶（`HELD#<hash % 4>`），sweeper 逐桶查 |
+| `PK=DLQ` / `PK=AUDIT` | 单分区，按时间追加 | 死信和审计的量远小于下单量，演示规模下可以接受；量大了按日期分桶（写在 README 的局限里） |
+| `HOLD#<id>` | 均匀散开 | 无 |
+
+## 3. 热点 key：实测而不是声称
+
+LocalStack 不模拟分区吞吐上限，所以这里**测不到也不声称**「没有限流」。能测的是同一个 item 上的乐观并发冲突。
+`scripts/bench_shards.py`：400 件、400 单、32 线程，三轮（`docs/results/bench_shards.md`）：
+
+| 分片 | 占到 | 冲突放弃 | 每单冲突 | p99 ms |
+|---|---|---|---|---|
+| 1 | 252 / 254 / 252 | 148 / 146 / 148 | 4.29 / 4.31 / 4.21 | 4313 / 3239 / 2372 |
+| 8 | 399 / 400 / 400 | 1 / 0 / 0 | 1.62 / 1.49 / 1.54 | 2193 / 1443 / 3069 |
+
+分片的代价：一单要从一个分片里拿够；卖到最后几件时，库存散在各片里。合并分片没有实现。
+
+## 4. 部分失败
+
+| 中间态 | 能不能出现 | 怎么办 |
+|---|---|---|
+| 扣了库存、没写 hold（或反过来） | 不能：同一个 `TransactWriteItems` | — |
+| hold 改了状态、库存没还 | 不能：release / expire 的两半在同一个事务里 | — |
+| hold 写了、延迟消息没发 | 能（进程死在两步之间） | 同 key 重试时 API 补发；没人重试时 sweeper 过期它（`test_sweeper_expires_a_hold_whose_message_was_lost`） |
+| 死信归档写了、SQS 里没删 | 能 | 下次 sync 按 message id 判重，空操作 |
+| 重放的认领写了、消息没发出去 | 能（状态停在 REPLAYING） | 审计里看得到；没有自动恢复，需要人工把归档行改回 OPEN（局限） |
