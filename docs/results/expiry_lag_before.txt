@@ -1,0 +1,3 @@
+$ .venv/bin/python scripts/measure_expiry_lag.py --holds 30 --hold-seconds 3   # LocalStack defaults
+holds=30 hold_seconds=3 expired=30 by={'expiry-message': 30}
+lag after expiresAt ms: min=5416 p50=7056 p90=8459 max=8510 mean=7000

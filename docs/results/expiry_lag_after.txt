@@ -1,0 +1,6 @@
+$ # LAMBDA_EVENT_SOURCE_MAPPING_MAX_BACKOFF_ON_EMPTY_POLL_SEC=1, first run right after a deploy (cold Lambda)
+holds=30 hold_seconds=3 expired=30 by={'expiry-message': 30}
+lag after expiresAt ms: min=4205 p50=5349 p90=6599 max=6651 mean=5496
+$ # same, Lambda warm
+holds=30 hold_seconds=3 expired=30 by={'expiry-message': 30}
+lag after expiresAt ms: min=1018 p50=2478 p90=3926 max=3981 mean=2459

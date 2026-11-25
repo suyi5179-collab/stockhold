@@ -15,7 +15,7 @@ def _client(service: str, endpoint: str, region: str):
     os.environ.setdefault("AWS_ACCESS_KEY_ID", "test")
     os.environ.setdefault("AWS_SECRET_ACCESS_KEY", "test")
     return boto3.client(
-        service, endpoint_url=endpoint, region_name=region,
+        service, endpoint_url=endpoint or None, region_name=region,
         # No SDK-level retries on DynamoDB: conflicts are retried by our own loop, so they can be counted.
         config=Config(retries={"max_attempts": 1 if service == "dynamodb" else 3, "mode": "standard"},
                       max_pool_connections=64, s3={"addressing_style": "path"}),
@@ -37,3 +37,12 @@ def sqs():
 
 def s3():
     return client("s3")
+
+
+@functools.lru_cache(maxsize=None)
+def _queue_url(name: str, endpoint: str) -> str:
+    return sqs().get_queue_url(QueueName=name)["QueueUrl"]
+
+
+def queue_url(name: str) -> str:
+    return _queue_url(name, settings().aws_endpoint)

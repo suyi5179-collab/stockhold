@@ -2,7 +2,15 @@
 // CI runs `cdk synth` so a template that cannot synthesise fails the build.
 import * as cdk from 'aws-cdk-lib'
 import * as ddb from 'aws-cdk-lib/aws-dynamodb'
+import * as events from 'aws-cdk-lib/aws-events'
+import * as targets from 'aws-cdk-lib/aws-events-targets'
+import * as lambda from 'aws-cdk-lib/aws-lambda'
+import { SqsEventSource } from 'aws-cdk-lib/aws-lambda-event-sources'
+import * as sqs from 'aws-cdk-lib/aws-sqs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
+const here = path.dirname(fileURLToPath(import.meta.url))
 const app = new cdk.App()
 const stack = new cdk.Stack(app, 'Stockhold', { env: { account: '000000000000', region: 'us-east-1' } })
 
@@ -28,4 +36,34 @@ table.addGlobalSecondaryIndex({
 })
 // @learn:end cdk-table
 
+const code = lambda.Code.fromAsset(path.join(here, '../build/lambda'))
+const env = { STOCKHOLD_TABLE: table.tableName, STOCKHOLD_EXPIRY_QUEUE: 'stockhold-hold-expiry' }
+const fn = (id, handler, extra = {}) => {
+  const f = new lambda.Function(stack, id, {
+    functionName: `stockhold-${id.toLowerCase()}`, runtime: lambda.Runtime.PYTHON_3_11, handler, code,
+    memorySize: 256, timeout: cdk.Duration.seconds(30), environment: { ...env, ...extra },
+  })
+  table.grantReadWriteData(f)
+  return f
+}
+
+// @learn:cdk-expiry
+const expiryDlq = new sqs.Queue(stack, 'ExpiryDlq', { queueName: 'stockhold-hold-expiry-dlq' })
+const expiryQueue = new sqs.Queue(stack, 'ExpiryQueue', {
+  queueName: 'stockhold-hold-expiry',
+  visibilityTimeout: cdk.Duration.seconds(30),
+  deadLetterQueue: { queue: expiryDlq, maxReceiveCount: 5 },
+})
+const expire = fn('Expire', 'expire.handler')
+expire.addEventSource(new SqsEventSource(expiryQueue, { batchSize: 10, reportBatchItemFailures: true }))
+expiryQueue.grantSendMessages(expire) // long holds are re-delayed in 15-minute hops
+
+const sweeper = fn('Sweeper', 'sweeper.handler')
+new events.Rule(stack, 'SweepEveryMinute', {
+  schedule: events.Schedule.rate(cdk.Duration.minutes(1)),
+  targets: [new targets.LambdaFunction(sweeper)],
+})
+// @learn:end cdk-expiry
+
 new cdk.CfnOutput(stack, 'TableName', { value: table.tableName })
+new cdk.CfnOutput(stack, 'ExpiryQueueUrl', { value: expiryQueue.queueUrl })

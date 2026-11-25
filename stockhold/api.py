@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from flask import Blueprint, jsonify, request
 
-from . import inventory
+from . import expiry, inventory
 from .states import StockholdError, ValidationError
 
 bp = Blueprint("api", __name__, url_prefix="/v1")
@@ -58,6 +58,12 @@ def reserve():
         raise ValidationError("an Idempotency-Key header (1-128 chars) is required")
     hold = inventory.reserve(str(d.get("sku", "")), qty, str(d.get("order_id", "")), hold_seconds,
                              client=client_id(), idempotency_key=key)
+    # @learn:api-schedule
+    # A crash between the reserve and this send leaves a hold with no expiry message. A retry of the
+    # same request heals it here; if nobody retries, the sweeper expires it.
+    if hold["status"] == "HELD" and not hold.get("expiry_message"):
+        hold["expiry_message"] = expiry.schedule(hold)
+    # @learn:end api-schedule
     return jsonify(hold), 200 if hold.get("replayed") else 201
 
 
