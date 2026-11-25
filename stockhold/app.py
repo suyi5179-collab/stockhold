@@ -7,7 +7,7 @@ import time
 
 from flask import Flask, jsonify
 
-from . import api, auth, ops
+from . import api, auth, checkout, ops
 from .config import settings
 from .states import StockholdError
 
@@ -31,6 +31,7 @@ def create_app() -> Flask:
     app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax")
     app.register_blueprint(api.bp)
     app.register_blueprint(ops.bp)
+    app.register_blueprint(checkout.bp)
 
     @app.errorhandler(StockholdError)
     def _err(e: StockholdError):

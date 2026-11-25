@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}结账模拟 · stockhold{% endblock %}
+{% block main %}
+<section class="card">
+  <h1>结账模拟：同时下 N 单，看会不会超卖</h1>
+  <p class="muted">每一单都是一次真实的 reserve：DynamoDB 条件写 + 乐观并发重试。热门商品的库存拆成多个分片，每次随机选一个有货的分片。</p>
+  <div class="row">
+    <label>商品 <select id="sku" data-testid="sku">
+      {% for s in skus %}<option value="{{ s[0] }}">{{ s[3] }}</option>{% endfor %}
+    </select></label>
+    <span class="muted">或者新建一个：</span>
+    <label>件数 <input id="units" type="number" value="100" min="1" max="5000" style="width:90px"></label>
+    <label>分片 <input id="shards" type="number" value="1" min="1" max="32" style="width:70px" data-testid="shards"></label>
+    <button id="new-sku" data-testid="new-sku">新建商品</button>
+  </div>
+  <div class="row">
+    <label>订单数 <input id="orders" type="number" value="150" min="1" max="2000" style="width:90px" data-testid="orders"></label>
+    <label>并发 <input id="concurrency" type="number" value="32" min="1" max="64" style="width:70px"></label>
+    <button id="go" class="primary" data-testid="flash-go">并发下单</button>
+    <span id="busy" class="muted"></span>
+  </div>
+</section>
+<section class="card">
+  <h2>库存 <code id="cur-sku"></code></h2>
+  <div class="stats" id="stats" data-testid="stats"></div>
+  <div id="shard-bars" class="bars" data-testid="shard-bars"></div>
+</section>
+<section class="card" id="result-card" hidden>
+  <h2>这一轮的结果</h2>
+  <div class="stats" id="result" data-testid="flash-result"></div>
+  <p class="muted" id="result-note"></p>
+</section>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='checkout.js') }}"></script>{% endblock %}
