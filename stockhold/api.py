@@ -16,6 +16,11 @@ def body() -> dict:
     return data
 
 
+def client_id() -> str:
+    """Who is calling. Until authentication exists (step 05) everyone is the same client."""
+    return "anonymous"
+
+
 @bp.errorhandler(StockholdError)
 def _err(e: StockholdError):
     return jsonify(e.to_dict()), e.status
@@ -48,8 +53,12 @@ def reserve():
     hold_seconds = d.get("hold_seconds")
     if hold_seconds is not None and (not isinstance(hold_seconds, int) or not 1 <= hold_seconds <= 86400):
         raise ValidationError("hold_seconds must be an integer between 1 and 86400")
-    hold = inventory.reserve(str(d.get("sku", "")), qty, str(d.get("order_id", "")), hold_seconds)
-    return jsonify(hold), 201
+    key = request.headers.get("Idempotency-Key", "").strip()
+    if not key or len(key) > 128:
+        raise ValidationError("an Idempotency-Key header (1-128 chars) is required")
+    hold = inventory.reserve(str(d.get("sku", "")), qty, str(d.get("order_id", "")), hold_seconds,
+                             client=client_id(), idempotency_key=key)
+    return jsonify(hold), 200 if hold.get("replayed") else 201
 
 
 @bp.get("/reservations/<hold_id>")

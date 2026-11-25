@@ -1,6 +1,8 @@
 """Products, stock shards and holds. Every write that moves stock is a conditional write."""
 from __future__ import annotations
 
+import hashlib
+import json
 import random
 import time
 import uuid
@@ -11,8 +13,8 @@ from . import keys, states
 from .aws import ddb
 from .config import settings
 from .dynamo import cancellation_codes, error_code, item, plain, vals
-from .states import (HELD, Contention, HoldExpired, HoldNotFound, InsufficientStock, InvalidTransition,
-                     NotFound, ValidationError)
+from .states import (HELD, Contention, HoldExpired, HoldNotFound, IdempotencyKeyReused, InsufficientStock,
+                     InvalidTransition, NotFound, ValidationError)
 
 
 def now_ms() -> int:
@@ -61,10 +63,14 @@ def read_shards(sku: str) -> list[dict]:
 
 # ---------------------------------------------------------------- reserve
 
-def _hold_item(hold_id, sku, shard, qty, order_id, hold_seconds, t_ms, reserve_detail):
+def request_hash(sku: str, qty: int, order_id: str) -> str:
+    return hashlib.sha256(json.dumps([sku, qty, order_id]).encode()).hexdigest()[:16]
+
+
+def _hold_item(hold_id, sku, shard, qty, order_id, hold_seconds, t_ms, reserve_detail, req_hash=None):
     return {
         "PK": keys.hold_pk(hold_id), "SK": "HOLD", "hold_id": hold_id, "sku": sku, "shard": shard, "qty": qty,
-        "order_id": order_id, "status": HELD, "version": 1, "created_at_ms": t_ms,
+        "order_id": order_id, "request_hash": req_hash or request_hash(sku, qty, order_id), "status": HELD, "version": 1, "created_at_ms": t_ms,
         "expires_at_ms": t_ms + hold_seconds * 1000, "hold_seconds": hold_seconds,
         "history": [{"from": None, "to": HELD, "at_ms": t_ms, "by": "api"}],
         "reserve": reserve_detail,
@@ -75,13 +81,37 @@ def _hold_item(hold_id, sku, shard, qty, order_id, hold_seconds, t_ms, reserve_d
     }
 
 
-def reserve(sku: str, qty: int, order_id: str, hold_seconds: int | None = None, hold_id: str | None = None) -> dict:
-    """Hold `qty` units of `sku` for an order. Returns the hold."""
+def _existing(hold_id: str, req_hash: str) -> dict | None:
+    """Idempotent replay: the same key with the same request returns the hold it created the first time."""
+    # @learn:idempotent-replay
+    try:
+        h = get_hold(hold_id)
+    except HoldNotFound:
+        return None
+    if h.get("request_hash") != req_hash:
+        raise IdempotencyKeyReused("this Idempotency-Key was already used for a different request", hold_id=hold_id)
+    return {**h, "replayed": True}
+    # @learn:end idempotent-replay
+
+
+def reserve(sku: str, qty: int, order_id: str, hold_seconds: int | None = None, hold_id: str | None = None,
+            client: str = "anonymous", idempotency_key: str | None = None) -> dict:
+    """Hold `qty` units of `sku` for an order. Returns the hold.
+
+    With an idempotency key the hold id is derived from (client, key): a retried request finds the
+    hold it already created instead of taking stock a second time.
+    """
     if not isinstance(qty, int) or qty < 1 or qty > 100:
         raise ValidationError("qty must be an integer between 1 and 100")
     if not order_id:
         raise ValidationError("order_id is required")
     hold_seconds = hold_seconds or settings().default_hold_seconds
+    req_hash = request_hash(sku, qty, order_id)
+    if idempotency_key:
+        hold_id = keys.hold_id_for(client, idempotency_key)
+        prior = _existing(hold_id, req_hash)
+        if prior:
+            return prior
     hold_id = hold_id or "h_" + uuid.uuid4().hex[:20]
     shards = read_shards(sku)
     if not shards:
@@ -121,7 +151,14 @@ def reserve(sku: str, qty: int, order_id: str, hold_seconds: int | None = None, 
             return public(hold)
         except ClientError as e:
             codes = cancellation_codes(e)
-            if error_code(e) != "TransactionCanceledException" or codes[0] not in ("ConditionalCheckFailed", "TransactionConflict"):
+            if error_code(e) != "TransactionCanceledException":
+                raise
+            if len(codes) > 1 and codes[1] == "ConditionalCheckFailed":
+                # The hold already exists: a concurrent copy of this same request won.
+                prior = _existing(hold_id, req_hash)
+                if prior:
+                    return prior
+            if codes[0] not in ("ConditionalCheckFailed", "TransactionConflict") and codes[1:2] != ["TransactionConflict"]:
                 raise
             # Someone else moved this shard first: re-read and try again (optimistic concurrency).
             conflicts += 1
@@ -181,6 +218,7 @@ def transition(hold_id: str, to: str, by: str, reason: str = "") -> dict:
         raise HoldExpired(f"hold {hold_id} expired before it was confirmed", hold_id=hold_id)
     entry = {"from": hold["status"], "to": to, "at_ms": t_ms, "by": by, **({"reason": reason} if reason else {})}
     t = settings().table
+    # @learn:transition-guard
     update_hold = {
         "TableName": t, "Key": item({"PK": keys.hold_pk(hold_id), "SK": "HOLD"}),
         "UpdateExpression": "SET #s = :to, version = version + :one, history = list_append(history, :h) REMOVE gsi1pk, gsi1sk",
@@ -189,11 +227,15 @@ def transition(hold_id: str, to: str, by: str, reason: str = "") -> dict:
         "ExpressionAttributeValues": vals({":to": to, ":one": 1, ":h": [entry], ":held": HELD, ":v": hold["version"],
                                            **({":now": t_ms} if to == states.CONFIRMED else {})}),
     }
+    # @learn:end transition-guard
+    if to != states.CONFIRMED and "no_release_guard" in settings().sabotage:
+        return _give_back_unsafe(hold, update_hold, t)
     try:
         if to == states.CONFIRMED:
             ddb().update_item(**update_hold)
         else:
             # Releasing and expiring give the units back to the shard the hold came from, in the same transaction.
+            # @learn:release-transact
             ddb().transact_write_items(TransactItems=[
                 {"Update": update_hold},
                 {"Update": {"TableName": t, "Key": item({"PK": keys.sku_pk(hold["sku"]), "SK": keys.shard_sk(hold["shard"])}),
@@ -201,6 +243,7 @@ def transition(hold_id: str, to: str, by: str, reason: str = "") -> dict:
                             "ConditionExpression": "attribute_exists(PK)",
                             "ExpressionAttributeValues": vals({":n": hold["qty"], ":one": 1})}},
             ])
+            # @learn:end release-transact
     except ClientError as e:
         if error_code(e) not in ("ConditionalCheckFailedException", "TransactionCanceledException"):
             raise
@@ -212,6 +255,20 @@ def transition(hold_id: str, to: str, by: str, reason: str = "") -> dict:
             raise HoldExpired(f"hold {hold_id} expired before it was confirmed", hold_id=hold_id) from e
         raise InvalidTransition(f"hold {hold_id} is {cur['status']}", from_state=cur["status"], to_state=to) from e
     return {"hold": get_hold(hold_id), "changed": True}
+
+
+def _give_back_unsafe(hold: dict, update_hold: dict, t: str) -> dict:
+    """Failure control `no_release_guard`: two separate writes, neither checks the hold is still HELD."""
+    # @learn:release-unsafe
+    entry = update_hold["ExpressionAttributeValues"][":h"]
+    ddb().update_item(TableName=t, Key=update_hold["Key"], ExpressionAttributeNames={"#s": "status"},
+                      UpdateExpression="SET #s = :to, history = list_append(history, :h) REMOVE gsi1pk, gsi1sk",
+                      ExpressionAttributeValues={":to": update_hold["ExpressionAttributeValues"][":to"], ":h": entry})
+    ddb().update_item(TableName=t, Key=item({"PK": keys.sku_pk(hold["sku"]), "SK": keys.shard_sk(hold["shard"])}),
+                      UpdateExpression="SET available = available + :n",
+                      ExpressionAttributeValues=vals({":n": hold["qty"]}))
+    # @learn:end release-unsafe
+    return {"hold": get_hold(hold["hold_id"]), "changed": True}
 
 
 def confirm(hold_id: str, by: str = "api") -> dict:
