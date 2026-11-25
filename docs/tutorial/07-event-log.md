@@ -12,6 +12,8 @@ hold 时长该设多久？设短了，付款慢一点的客户被过期，体验
 不在业务代码里到处写日志。DynamoDB Streams 把表上每一次变更（新旧两份镜像）交给 eventlog Lambda（`infra/app.mjs`，锚点 `cdk-eventlog`）。
 Lambda 只挑一种变更：hold 行，而且状态变了（锚点 `stream-to-event`）。像「记下延迟消息的 id」这种修改，状态没变，就跳过。
 
+`tests/test_eventlog.py::test_hold_changes_land_in_s3_as_json_lines`（锚点 `test-eventlog-e2e`）走真的 Streams 和 Lambda：占住、释放，两行事件都出现在 S3 的日期分区里。
+
 每个事件一行 JSON，写到 `s3://stockhold-events/events/dt=YYYY-MM-DD/hour=HH/<请求 id>.jsonl`。按日期和小时分区，查询只扫需要的那几天。
 
 事件里带上分析要用的字段：`wait_ms`（从占住到这次变化用了多久）、`lag_after_expiry_ms`（过期事件比 expiresAt 晚了多少）。

@@ -1,0 +1,20 @@
+{% extends "learn_base.html" %}
+{% block learn %}
+<section class="card doc" data-testid="problems">
+  <h1>日常问题与解决</h1>
+  <div class="intro">{{ doc.intro | safe }}</div>
+  {% for p in doc["items"] %}
+  <details class="qa problem" data-problem="{{ p.id }}">
+    <summary><code>{{ p.num }}</code> {{ p.title }}</summary>
+    <div class="answer">
+      <div class="row">
+        <button class="video-btn" data-problem-video="{{ p.id }}">▶ 看讲解视频</button>
+        {% for a in p.anchors %}<a class="src-link" data-anchor="{{ a }}" href="#">看源码：{{ a }}</a>{% endfor %}
+      </div>
+      <div class="pvideo" data-video-slot="{{ p.id }}"></div>
+      {{ p.html | safe }}
+    </div>
+  </details>
+  {% endfor %}
+</section>
+{% endblock %}

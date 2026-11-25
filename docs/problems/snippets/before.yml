@@ -1,0 +1,17 @@
+# Before-fix versions of docker-compose.yml (not used). See README.md in this folder.
+services:
+  localstack:
+    image: localstack/localstack:4.9
+    environment:
+      # q02: no setting for the event-source-mapping poller, so it used its default 10 s backoff.
+      # @learn:q02-before
+      SERVICES: dynamodb,dynamodbstreams,sqs,lambda,s3,logs,iam,sts,events,cloudformation,ssm,cloudwatch
+      LAMBDA_DOCKER_NETWORK: stockhold_default
+      LAMBDA_RUNTIME_ENVIRONMENT_TIMEOUT: "60"
+      DYNAMODB_IN_MEMORY: "1"
+      # @learn:end q02-before
+    # q05: a smaller limit and no cap on the Kinesis emulator that backs DynamoDB Streams.
+    # @learn:q05-before
+    mem_limit: 1100m
+    # (no DYNAMODB_HEAP_SIZE, no NODE_OPTIONS, Kinesis persistence on, 500 ms Kinesis latency)
+    # @learn:end q05-before

@@ -77,8 +77,10 @@ def _archive(m: dict) -> None:
         "PK": DLQ_PK, "SK": _sk(now, mid), "message_id": mid, "raw": m["Body"], "hold_id": hold_id or "",
         "sku": sku or "", "event_type": (body or {}).get("type", "") if isinstance(body, dict) else "",
         "code": fail.get("last_code", "UNKNOWN"), "attempts": fail.get("attempts", []),
+        # @learn:dlq-receive-count
         # SQS counts our own archiving receive too; subtract it so this is "times the consumer saw it".
         "receive_count": max(0, int(m["Attributes"].get("ApproximateReceiveCount", "1")) - 1),
+        # @learn:end dlq-receive-count
         "sent_at_ms": int(m["Attributes"].get("SentTimestamp", "0")), "first_failed_at_ms": fail.get("first_at_ms", now),
         "archived_at_ms": now, "status": "OPEN",
         "message_attributes": {k: v.get("StringValue") for k, v in m.get("MessageAttributes", {}).items()},

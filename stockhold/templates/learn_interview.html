@@ -1,0 +1,16 @@
+{% extends "learn_base.html" %}
+{% block learn %}
+<section class="card doc" data-testid="interview">
+  <h1>面试题</h1>
+  <div class="intro">{{ doc.intro | safe }}</div>
+  {% for g in doc.groups %}
+  <h2>{{ g.title }}</h2>
+  {% for it in g["items"] %}
+  <details class="qa" data-q="{{ loop.index }}">
+    <summary>{{ it.title }}</summary>
+    <div class="answer">{{ it.html | safe }}</div>
+  </details>
+  {% endfor %}
+  {% endfor %}
+</section>
+{% endblock %}

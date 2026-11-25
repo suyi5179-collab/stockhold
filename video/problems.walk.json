@@ -1,0 +1,480 @@
+[
+ {
+  "id": "q01-fixed-idempotency-key",
+  "title": "第二次跑测试，幂等测试红了",
+  "subtitle": "固定的 Idempotency Key 撞上了上一轮留下的 hold",
+  "lang": "python",
+  "code": "def test_same_key_returns_the_same_hold(new_sku):\n    sku = new_sku(5)\n    # The key carries this run's sku: the table outlives the test run, and an old hold with the same\n    # key and a different body is (correctly) a 422.\n    a = inventory.reserve(sku, 2, \"o-1\", idempotency_key=f\"k-1-{sku}\")\n    b = inventory.reserve(sku, 2, \"o-1\", idempotency_key=f\"k-1-{sku}\")\n    assert a[\"hold_id\"] == b[\"hold_id\"] and b[\"replayed\"] is True and \"replayed\" not in a\n    assert inventory.stock_report(sku)[\"available\"] == 3",
+  "segments": [
+   {
+    "lines": [],
+    "text": "现象。幂等的测试第一次跑全绿，第二次跑就红了，报的是幂等键被另一个请求用过了。"
+   },
+   {
+    "lines": [],
+    "text": "先怀疑代码。可是代码没改，同一份代码第一次是绿的，所以问题不在逻辑本身，在测试的环境。"
+   },
+   {
+    "lines": [],
+    "text": "再看数据。表在两次运行之间没有清空，上一轮用这个键建的 hold 还在，而这一轮的商品是新建的另一个。"
+   },
+   {
+    "lines": [],
+    "text": "同一个键配上不一样的请求，服务返回四百二十二。这恰恰说明服务是对的，错的是测试。"
+   },
+   {
+    "lines": [
+     5,
+     6
+    ],
+    "text": "修复以后，键里带上这一轮的商品编号，每次运行都是新键。"
+   },
+   {
+    "lines": [
+     3,
+     4
+    ],
+    "text": "注释写清楚为什么：表比测试活得久，旧的 hold 会一直在。"
+   },
+   {
+    "lines": [
+     7,
+     8
+    ],
+    "text": "断言不变，同一个键拿回同一个 hold，库存只扣一次。"
+   },
+   {
+    "lines": [],
+    "text": "证明：连跑两次全量测试都是绿的，修复前第二次必红。"
+   },
+   {
+    "lines": [],
+    "text": "面试里一句话：测试红了先分清是代码错还是测试错，这一次是测试错，而四百二十二正好证明了幂等是对的。"
+   }
+  ],
+  "example_code": "def test_same_key_returns_the_same_hold(new_sku):\n    sku = new_sku(5)\n    a = inventory.reserve(sku, 2, \"o-1\", idempotency_key=\"k-1\")\n    b = inventory.reserve(sku, 2, \"o-1\", idempotency_key=\"k-1\")\n    assert a[\"hold_id\"] == b[\"hold_id\"] and b[\"replayed\"] is True\n    assert inventory.stock_report(sku)[\"available\"] == 3",
+  "example_segments": [
+   {
+    "lines": [
+     3,
+     4
+    ],
+    "text": "修复前，键是写死的一个字符串。第一次跑没问题，第二次就和上一轮的 hold 撞上了。"
+   }
+  ]
+ },
+ {
+  "id": "q02-expiry-seven-seconds-late",
+  "title": "三秒的 hold，七秒以后才释放",
+  "subtitle": "LocalStack 的队列轮询在空闲时退避",
+  "lang": "yaml",
+  "code": "# The SQS poller behind event source mappings backs off up to 10 s when a queue is empty, which\n# made expiry land ~7 s late (docs/problems.md q02). Real SQS long-polls; 1 s is closer to it.\nLAMBDA_EVENT_SOURCE_MAPPING_MAX_BACKOFF_ON_EMPTY_POLL_SEC: \"1\"",
+  "segments": [
+   {
+    "lines": [],
+    "text": "现象。量了一下最终释放的窗口期，三十个三秒的 hold，平均晚了七秒才变成过期，最晚八秒半。"
+   },
+   {
+    "lines": [],
+    "text": "先看延迟消息本身。单独发一条延迟三秒的消息，自己去收，三秒七五就能收到，所以队列只慢了不到一秒。"
+   },
+   {
+    "lines": [],
+    "text": "再看 Lambda 的日志。每次调用只要几百毫秒，可是两次调用之间隔了好几秒。说明时间花在了谁来拉消息上。"
+   },
+   {
+    "lines": [],
+    "text": "去读 LocalStack 的配置源码，找到了答案：队列空的时候，轮询会退避，最多十秒才再拉一次。"
+   },
+   {
+    "lines": [
+     3
+    ],
+    "text": "修复是这一行，把空轮询的退避上限设成一秒。真实的 SQS 用长轮询，消息一到就返回，一秒更接近它。"
+   },
+   {
+    "lines": [
+     1,
+     2
+    ],
+    "text": "注释写明了原因和问题编号，以后有人想删掉这一行，会先看到为什么。"
+   },
+   {
+    "lines": [],
+    "text": "证明：同样的量法，Lambda 热的时候，中位数从七秒降到两秒半，最晚四秒。剩下的是延迟消息本身的误差和一批一批串行处理。"
+   },
+   {
+    "lines": [],
+    "text": "面试里一句话：我把窗口期拆成队列、轮询、处理三段分别量，定位到本地模拟器的轮询退避，量化了修复前后。"
+   }
+  ],
+  "example_code": "SERVICES: dynamodb,dynamodbstreams,sqs,lambda,s3,logs,iam,sts,events,cloudformation,ssm,cloudwatch\nLAMBDA_DOCKER_NETWORK: stockhold_default\nLAMBDA_RUNTIME_ENVIRONMENT_TIMEOUT: \"60\"\nDYNAMODB_IN_MEMORY: \"1\"",
+  "example_segments": [
+   {
+    "lines": [
+     1,
+     4
+    ],
+    "text": "修复前，这里没有任何轮询相关的设置，用的是默认的十秒退避。"
+   }
+  ]
+ },
+ {
+  "id": "q03-receive-count-four",
+  "title": "失败三次，页面上显示收到四次",
+  "subtitle": "归档自己收的那一次也被算进去了",
+  "lang": "python",
+  "code": "# SQS counts our own archiving receive too; subtract it so this is \"times the consumer saw it\".\n\"receive_count\": max(0, int(m[\"Attributes\"].get(\"ApproximateReceiveCount\", \"1\")) - 1),",
+  "segments": [
+   {
+    "lines": [],
+    "text": "现象。重放工具的列表里，每一条死信的收到次数都是四，可最大接收次数配的是三。"
+   },
+   {
+    "lines": [],
+    "text": "先看失败记录。每一条都正好有三次尝试，第一、第二、第三次，所以消费者确实只处理了三次。"
+   },
+   {
+    "lines": [],
+    "text": "那多出来的一次是谁？是重放工具自己。归档的时候要从死信队列里收一次消息，SQS 把这一次也算进了接收次数。"
+   },
+   {
+    "lines": [
+     2
+    ],
+    "text": "修复以后，归档时减掉自己这一次，最少是零。"
+   },
+   {
+    "lines": [
+     1
+    ],
+    "text": "注释说清楚这个数的含义：消费者看到它的次数。"
+   },
+   {
+    "lines": [],
+    "text": "证明：重放的测试断言收到次数大于等于三，页面上现在显示三，和失败记录一行对一行。"
+   },
+   {
+    "lines": [],
+    "text": "面试里一句话：值班的人会拿这个数判断重试有没有生效，我对上了失败记录，发现是观测者自己改变了被观测的值。"
+   }
+  ],
+  "example_code": "rec = {\n    \"message_id\": mid, \"raw\": m[\"Body\"], \"code\": fail.get(\"last_code\", \"UNKNOWN\"),\n    \"receive_count\": int(m[\"Attributes\"].get(\"ApproximateReceiveCount\", \"0\")),\n    \"archived_at_ms\": now, \"status\": \"OPEN\",\n}",
+  "example_segments": [
+   {
+    "lines": [
+     3
+    ],
+    "text": "修复前，直接照抄了 SQS 给的接收次数，没有扣掉归档自己那一次。"
+   }
+  ]
+ },
+ {
+  "id": "q04-paid-after-expiry",
+  "title": "顾客一起涌进来，付了款的单也过期了",
+  "subtitle": "付款事件排队十秒，到的时候 hold 已经过期",
+  "lang": "python",
+  "code": "update_hold = {\n    \"TableName\": t, \"Key\": item({\"PK\": keys.hold_pk(hold_id), \"SK\": \"HOLD\"}),\n    \"UpdateExpression\": \"SET #s = :to, version = version + :one, history = list_append(history, :h) REMOVE gsi1pk, gsi1sk\",\n    \"ConditionExpression\": \"#s = :held AND version = :v\" + (\" AND expires_at_ms > :now\" if to == states.CONFIRMED else \"\"),\n    \"ExpressionAttributeNames\": {\"#s\": \"status\"},\n    \"ExpressionAttributeValues\": vals({\":to\": to, \":one\": 1, \":h\": [entry], \":held\": HELD, \":v\": hold[\"version\"],\n                                       **({\":now\": t_ms} if to == states.CONFIRMED else {})}),\n}",
+  "segments": [
+   {
+    "lines": [],
+    "text": "现象。模拟一百五十个顾客五秒内一起下单，只有三十个付款成功，三十九条付款事件进了死信，第一次失败的原因都是 hold 已过期。"
+   },
+   {
+    "lines": [],
+    "text": "先量付款事件从发出到第一次被处理，中位数十秒半，最长十五秒。hold 只有十二秒，所以付了款也来不及。"
+   },
+   {
+    "lines": [],
+    "text": "第一个假设，Lambda 一批十条串行处理太慢。改成并行处理，再跑一次，没变好。这个假设排除。"
+   },
+   {
+    "lines": [],
+    "text": "第二个假设，一次多拿几条。改成一批五十条加一秒的攒批窗口，更差了，回退。"
+   },
+   {
+    "lines": [],
+    "text": "最后看到瓶颈在本机的 DynamoDB：一百五十个线程同时抢一个分片，所有调用都慢，Lambda 只是跟着慢。这是容量问题。"
+   },
+   {
+    "lines": [
+     4
+    ],
+    "text": "真正要守住的是正确性。确认付款的条件里，除了状态和版本号，还要求过期时间大于现在。"
+   },
+   {
+    "lines": [
+     6,
+     7
+    ],
+    "text": "现在的时间作为参数带进条件里，判断在 DynamoDB 那一侧原子地完成。"
+   },
+   {
+    "lines": [],
+    "text": "所以过期以后才到的付款，一定确认不了，会进死信，重放工具的 dry run 会提示去退款，而不是重放。"
+   },
+   {
+    "lines": [],
+    "text": "证明：测试里有一条故意让付款晚到，断言原因是 hold 已过期，hold 没有被确认。顾客分散到四十秒里到达以后，一百五十人里九十九人付款成功，零条死信。"
+   },
+   {
+    "lines": [],
+    "text": "面试里一句话：两次修法没用我都写下来了；最后分清了容量问题和正确性问题，正确性靠条件写守住，hold 时长靠数据去调。"
+   }
+  ],
+  "example_code": "update_hold = {\n    \"TableName\": t, \"Key\": item({\"PK\": keys.hold_pk(hold_id), \"SK\": \"HOLD\"}),\n    \"UpdateExpression\": \"SET #s = :to, version = version + :one, history = list_append(history, :h)\",\n    \"ConditionExpression\": \"#s = :held AND version = :v\",\n    \"ExpressionAttributeNames\": {\"#s\": \"status\"},\n    \"ExpressionAttributeValues\": vals({\":to\": to, \":one\": 1, \":h\": [entry], \":held\": HELD, \":v\": hold[\"version\"]}),\n}",
+  "example_segments": [
+   {
+    "lines": [
+     4
+    ],
+    "text": "如果条件里只检查状态和版本号，过期但还没被释放的 hold，在窗口期里仍然能被确认。"
+   }
+  ]
+ },
+ {
+  "id": "q05-localstack-oom",
+  "title": "LocalStack 被 OOM 杀掉了",
+  "subtitle": "给 DynamoDB Streams 供数的 Kinesis 模拟器吃了六百兆",
+  "lang": "yaml",
+  "code": "DYNAMODB_HEAP_SIZE: 256m\n# DynamoDB Streams are served by LocalStack's Kinesis emulator (a Node process). Unbounded, it grew to\n# 600 MB during the tests; capping the V8 heap makes it collect instead (docs/problems.md q05).\nNODE_OPTIONS: \"--max-old-space-size=160\"\nKINESIS_PERSISTENCE: \"0\"\nKINESIS_LATENCY: \"100\"",
+  "segments": [
+   {
+    "lines": [],
+    "text": "现象。跑流量模拟的时候，所有请求突然报连接被关闭。容器状态还是运行中，健康检查却不返回了。"
+   },
+   {
+    "lines": [],
+    "text": "先看容器。docker inspect 显示 OOM killed 是真，可容器没有退出。进去看进程，只剩下守护进程和 Java，主进程没了。"
+   },
+   {
+    "lines": [],
+    "text": "所以是容器里的一个进程被内存上限杀掉了。先把上限从一千一百兆提到一千五百多兆，能跑了。"
+   },
+   {
+    "lines": [],
+    "text": "可跑完测试，内存又涨到一点二六个 G。再按进程看，最大的不是 DynamoDB，而是一个 Node 进程，六百兆。"
+   },
+   {
+    "lines": [],
+    "text": "它是 Kinesis 的模拟器。LocalStack 用它来实现 DynamoDB Streams，也就是第七章加的事件日志。"
+   },
+   {
+    "lines": [
+     4
+    ],
+    "text": "修复是给这个 Node 进程的堆加上限，一百六十兆，它就会去回收，而不是一直涨。"
+   },
+   {
+    "lines": [
+     1
+    ],
+    "text": "DynamoDB 的 Java 堆也明确写成两百五十六兆。"
+   },
+   {
+    "lines": [
+     5,
+     6
+    ],
+    "text": "再关掉 Kinesis 的持久化，把它的人为延迟从五百毫秒降到一百，事件日志也快了一点。"
+   },
+   {
+    "lines": [],
+    "text": "证明：同样跑完全部测试，Node 进程一百七十三兆，整个容器七百五十四兆，记录在结果目录里。"
+   },
+   {
+    "lines": [],
+    "text": "面试里一句话：容器没退出不等于没被杀，我按进程看内存，找到了真正的大头，而不是一味加内存。"
+   }
+  ],
+  "example_code": "mem_limit: 1100m\n# (no DYNAMODB_HEAP_SIZE, no NODE_OPTIONS, Kinesis persistence on, 500 ms Kinesis latency)",
+  "example_segments": [
+   {
+    "lines": [
+     1,
+     2
+    ],
+    "text": "修复前，上限是一千一百兆，几个模拟器的堆都不设上限。"
+   }
+  ]
+ },
+ {
+  "id": "q06-stream-on-existing-table",
+  "title": "给已有的表加 Stream，CDK 部署失败",
+  "subtitle": "LocalStack 更新已有的表时拿不到 Stream 的 ARN",
+  "lang": "javascript",
+  "code": "const table = new ddb.Table(stack, 'Table', {\n  tableName: 'stockhold',\n  partitionKey: { name: 'PK', type: ddb.AttributeType.STRING },\n  sortKey: { name: 'SK', type: ddb.AttributeType.STRING },\n  billingMode: ddb.BillingMode.PAY_PER_REQUEST,\n  stream: ddb.StreamViewType.NEW_AND_OLD_IMAGES,   // feeds the event log (chapter 07)\n  removalPolicy: cdk.RemovalPolicy.DESTROY,\n})\n// Sparse: only HELD holds carry gsi1pk, so the sweeper reads open holds and nothing else.\ntable.addGlobalSecondaryIndex({\n  indexName: 'gsi1',\n  partitionKey: { name: 'gsi1pk', type: ddb.AttributeType.STRING },\n  sortKey: { name: 'gsi1sk', type: ddb.AttributeType.NUMBER },\n})\n// Holds by product, keyed per stock shard so a flash-sale product is not one hot index partition.\ntable.addGlobalSecondaryIndex({\n  indexName: 'gsi2',\n  partitionKey: { name: 'gsi2pk', type: ddb.AttributeType.STRING },\n  sortKey: { name: 'gsi2sk', type: ddb.AttributeType.NUMBER },\n})",
+  "segments": [
+   {
+    "lines": [],
+    "text": "现象。第七章给表打开 Stream，再部署，CDK 报错，事件日志 Lambda 的权限策略里，资源是 unknown，不是一个 ARN。"
+   },
+   {
+    "lines": [],
+    "text": "先看策略是怎么来的。CDK 给 Lambda 授权读 Stream，需要表的 Stream ARN，这个值要等表更新完才知道。"
+   },
+   {
+    "lines": [],
+    "text": "LocalStack 在更新一张已经存在的表时，没有把新 Stream 的 ARN 交回给 CloudFormation，于是拿到的是未知。"
+   },
+   {
+    "lines": [
+     6
+    ],
+    "text": "代码本身是对的，就是这一行，打开新旧两份镜像的 Stream。"
+   },
+   {
+    "lines": [],
+    "text": "修法是在部署流程上。删掉整个栈重新建，表一出生就带着 Stream，ARN 就有了。演示脚本本来就是从零建，所以只影响升级。"
+   },
+   {
+    "lines": [],
+    "text": "这件事还带出了第二个坑。删栈以后，失败那次留下的 Lambda 没被删掉，再部署说函数已存在。最后是把 LocalStack 整个清空重建。"
+   },
+   {
+    "lines": [],
+    "text": "证明：最后的验收是先清掉数据卷，再从零跑演示脚本，部署一次成功，事件日志的测试是绿的。"
+   },
+   {
+    "lines": [],
+    "text": "面试里一句话：本地模拟器不是 AWS，我把这类差异写进文档，并且用从零部署来验收，而不是在旧环境上碰运气。"
+   }
+  ],
+  "example_code": "const table = new ddb.Table(stack, 'Table', {\n  tableName: 'stockhold',\n  partitionKey: { name: 'PK', type: ddb.AttributeType.STRING },\n  sortKey: { name: 'SK', type: ddb.AttributeType.STRING },\n  billingMode: ddb.BillingMode.PAY_PER_REQUEST,\n  removalPolicy: cdk.RemovalPolicy.DESTROY,\n})",
+  "example_segments": [
+   {
+    "lines": [
+     5,
+     6
+    ],
+    "text": "修复前的表没有 Stream。已经部署过的栈里加上它，就走到了更新已有表这条有问题的路。"
+   }
+  ]
+ },
+ {
+  "id": "q07-oversell",
+  "title": "不带条件写，十件卖出了三十件",
+  "subtitle": "读出库存、算好、写回，中间别人也在写",
+  "lang": "python",
+  "code": "ddb().transact_write_items(TransactItems=[\n    {\"Update\": {\n        \"TableName\": settings().table,\n        \"Key\": item({\"PK\": keys.sku_pk(sku), \"SK\": keys.shard_sk(shard[\"shard\"])}),\n        \"UpdateExpression\": \"SET available = available - :n, version = version + :one\",\n        # The guarantee: never below zero, and nobody wrote this shard since we read it.\n        \"ConditionExpression\": \"available >= :n AND version = :v\",\n        \"ExpressionAttributeValues\": vals({\":n\": qty, \":v\": shard[\"version\"], \":one\": 1}),\n    }},\n    {\"Put\": {\n        \"TableName\": settings().table, \"Item\": item(hold),\n        \"ConditionExpression\": \"attribute_not_exists(PK)\",\n    }},\n])",
+  "segments": [
+   {
+    "lines": [],
+    "text": "这是一个典型的生产事故，用失败对照复现的。三十个人同时抢十件，关掉保护以后，三十个人全部成功，多卖了二十件。"
+   },
+   {
+    "lines": [],
+    "text": "怎么定位：看测试的断言，超卖件数是二十，不是零。再看每一单的记录，大家读到的剩余库存都是十。"
+   },
+   {
+    "lines": [
+     1
+    ],
+    "text": "修复后，扣库存和写 hold 放在同一个事务里。"
+   },
+   {
+    "lines": [
+     5
+    ],
+    "text": "库存是减出来的，不是写回一个算好的值。"
+   },
+   {
+    "lines": [
+     7
+    ],
+    "text": "关键是这个条件：剩余的够这一单，而且版本号还是我读到的那个。别人先写了，这一次就失败，重新读再试。"
+   },
+   {
+    "lines": [
+     12
+    ],
+    "text": "hold 这一行要求之前不存在，重试的请求不会再占一份。"
+   },
+   {
+    "lines": [],
+    "text": "证明：同一个测试，打开保护，十个人占到，超卖零件；关掉保护，超卖二十件，测试是红的。"
+   },
+   {
+    "lines": [],
+    "text": "面试里一句话：零超卖不靠锁，靠条件写；而且我能演示关掉它测试就红，说明测试是活的。"
+   }
+  ],
+  "example_code": "shard = shards[0]\nif shard[\"available\"] < qty:\n    raise InsufficientStock(f\"not enough {sku} in stock\", requested=qty, available=shard[\"available\"])\ntime.sleep(0.002)  # the gap every real read-modify-write has between its read and its write\nddb().update_item(TableName=settings().table,\n                  Key=item({\"PK\": keys.sku_pk(sku), \"SK\": keys.shard_sk(shard[\"shard\"])}),\n                  UpdateExpression=\"SET available = :a, version = :v\",\n                  ExpressionAttributeValues=vals({\":a\": shard[\"available\"] - qty, \":v\": shard[\"version\"] + 1}))",
+  "example_segments": [
+   {
+    "lines": [
+     1,
+     2
+    ],
+    "text": "失败对照走的是这条路，先读出库存，在程序里判断够不够。"
+   },
+   {
+    "lines": [
+     7,
+     8
+    ],
+    "text": "然后把算好的值直接写回去，不带任何条件。三十个人读到的都是十，写回的都是九。"
+   }
+  ]
+ },
+ {
+  "id": "q08-double-release",
+  "title": "重复的付款失败消息，把库存还了七次",
+  "subtitle": "释放不检查 hold 还是不是 HELD",
+  "lang": "python",
+  "code": "update_hold = {\n    \"TableName\": t, \"Key\": item({\"PK\": keys.hold_pk(hold_id), \"SK\": \"HOLD\"}),\n    \"UpdateExpression\": \"SET #s = :to, version = version + :one, history = list_append(history, :h) REMOVE gsi1pk, gsi1sk\",\n    \"ConditionExpression\": \"#s = :held AND version = :v\" + (\" AND expires_at_ms > :now\" if to == states.CONFIRMED else \"\"),\n    \"ExpressionAttributeNames\": {\"#s\": \"status\"},\n    \"ExpressionAttributeValues\": vals({\":to\": to, \":one\": 1, \":h\": [entry], \":held\": HELD, \":v\": hold[\"version\"],\n                                       **({\":now\": t_ms} if to == states.CONFIRMED else {})}),\n}",
+  "segments": [
+   {
+    "lines": [],
+    "text": "这也是典型事故，用第二个失败对照复现。同一条付款失败的消息同时来了八次，五件的商品，库存变成了十九件。"
+   },
+   {
+    "lines": [],
+    "text": "定位：十九减五是十四，每次还两件，正好七次多余的释放。八条消息里只有一条该生效。"
+   },
+   {
+    "lines": [
+     4
+    ],
+    "text": "修复后，释放的条件是：hold 现在还是 HELD，而且版本号没变。"
+   },
+   {
+    "lines": [
+     3
+    ],
+    "text": "同一次写里把状态改掉，再把它从过期扫描的索引里拿掉。"
+   },
+   {
+    "lines": [],
+    "text": "还库存的那一半和这一半在同一个事务里，hold 的条件不成立，库存也不会动。输掉的那七个，重新读一次，发现已经释放了，就当成功的空操作。"
+   },
+   {
+    "lines": [],
+    "text": "证明：同一个测试，打开保护，库存回到五，只有一次真正的释放；关掉保护，库存十九，测试是红的。"
+   },
+   {
+    "lines": [],
+    "text": "面试里一句话：至少一次投递是常态，所以每一个会改库存的消费者都必须幂等，我用条件写加事务做到，并且有对照证明。"
+   }
+  ],
+  "example_code": "entry = update_hold[\"ExpressionAttributeValues\"][\":h\"]\nddb().update_item(TableName=t, Key=update_hold[\"Key\"], ExpressionAttributeNames={\"#s\": \"status\"},\n                  UpdateExpression=\"SET #s = :to, history = list_append(history, :h) REMOVE gsi1pk, gsi1sk\",\n                  ExpressionAttributeValues={\":to\": update_hold[\"ExpressionAttributeValues\"][\":to\"], \":h\": entry})\nddb().update_item(TableName=t, Key=item({\"PK\": keys.sku_pk(hold[\"sku\"]), \"SK\": keys.shard_sk(hold[\"shard\"])}),\n                  UpdateExpression=\"SET available = available + :n\",\n                  ExpressionAttributeValues=vals({\":n\": hold[\"qty\"]}))",
+  "example_segments": [
+   {
+    "lines": [
+     2,
+     3,
+     4
+    ],
+    "text": "失败对照的写法，第一次写只改状态，不看它原来是什么。"
+   },
+   {
+    "lines": [
+     5,
+     6,
+     7
+    ],
+    "text": "第二次写把库存加回去，也没有条件，而且和上一次写不在一个事务里。"
+   }
+  ]
+ }
+]

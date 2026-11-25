@@ -1,0 +1,53 @@
+[
+  {"id": "s01", "part": "p01-reserve", "text": "这一段讲第一步，下单占库存。看一个订单进来的那一刻，库存这一行到底发生了什么。", "action": "goto:/learn", "highlight": "#learn-timeline"},
+  {"id": "s02", "part": "p01-reserve", "text": "先看左边这一列，七个阶段。它的状态是从后端实时读的，不是动画。亮到哪一步，订单就真的走到了哪一步。", "action": "noop", "highlight": ".timeline li[data-stage=order]"},
+  {"id": "s03", "part": "p01-reserve", "text": "点提交样例。这是真的下一单，两件 T 恤，四秒以后支付方会告诉我们付款失败。", "action": "submit:payment_failed", "highlight": "#run-info [data-testid=hold-id]"},
+  {"id": "s04", "part": "p01-reserve", "text": "看请求头里的幂等键。为什么先看它？网络超时客户端会重试，同一个键的重试会落在同一个 hold 上，库存不会扣两次。", "action": "stage:order", "highlight": "#stage-detail [data-hl=idem-key]", "shape": "circle"},
+  {"id": "s05", "part": "p01-reserve", "text": "点到 reserve。看这一行，可卖的库存减了二。注意它是减出来的，不是写回一个算好的数。", "action": "stage:reserve", "highlight": "#stage-detail [data-hl=available]", "shape": "circle"},
+  {"id": "s06", "part": "p01-reserve", "text": "再看条件。剩下的够这一单，而且版本号还是我读到的那个，两条都满足才写得进去。别人先写了，我就重读再试。", "action": "noop", "highlight": "#stage-detail [data-hl=condition]"},
+  {"id": "s07", "part": "p01-reserve", "text": "版本号从零变成一，冲突零次。说明这一单没有和别人撞上。下一步想，三十个人同时抢十件会怎样。", "action": "noop", "highlight": "#stage-detail [data-hl=version]", "shape": "circle"},
+  {"id": "s08", "part": "p01-reserve", "text": "答案在源码里。点看源码，链接固定在当前这个提交上，扣库存和写 hold 在同一个事务里。测试里关掉这个条件，十件会卖出三十件。", "action": "source:reserve-transact", "highlight": "#stage-detail a.src-link[data-anchor=reserve-transact]"},
+
+  {"id": "s09", "part": "p02-idempotency", "text": "这一段讲幂等。付款失败的事件到了以后，等释放这一步亮起来。", "action": "stage:lambda", "highlight": ".timeline li[data-stage=lambda]"},
+  {"id": "s10", "part": "p02-idempotency", "text": "看状态转移，从占用到释放。只有 hold 现在还是占用，这次写才会成功。", "action": "noop", "highlight": "#stage-detail [data-hl=transition]"},
+  {"id": "s11", "part": "p02-idempotency", "text": "是谁做的？付款事件的消费者。下面这一行是那个 Lambda 在 CloudWatch 里真实打出来的日志，改没改，写得清清楚楚。", "action": "noop", "highlight": "#stage-detail [data-hl=lambda-log]"},
+  {"id": "s12", "part": "p02-idempotency", "text": "为什么这里要防重复？队列是至少投递一次，同一条消息可能来八次。测试里八条一起来，只有一条生效；关掉检查，五件的商品变成了十九件。", "action": "source:transition-guard", "highlight": "#stage-detail a.src-link[data-anchor=transition-guard]"},
+
+  {"id": "s13", "part": "p03-expiry", "text": "这一段讲过期。如果没人付款，库存谁来还？点到延迟消息这一步。", "action": "stage:enqueue", "highlight": ".timeline li[data-stage=enqueue]"},
+  {"id": "s14", "part": "p03-expiry", "text": "看延迟的秒数，正好是 hold 的时长。到点以后这条消息才会出现，过期的 Lambda 收到它，hold 还是占用就释放。", "action": "noop", "highlight": "#stage-detail [data-hl=delay]", "shape": "circle"},
+  {"id": "s15", "part": "p03-expiry", "text": "为什么不用锁？锁要一直握到付款完成。这里是最终释放，过期和真正释放之间有一个窗口，本机实测中位数两秒半。窗口里只是少卖，不会卖错。", "action": "expand:details[data-json=expiry-body]", "highlight": "#stage-detail details[data-json=expiry-body] pre"},
+
+  {"id": "s16", "part": "p04-payments-dlq", "text": "这一段讲坏消息。点坏消息样例，这一次下游的订单服务会连着挂三次。", "action": "submit:dlq", "highlight": "#branch-h"},
+  {"id": "s17", "part": "p04-payments-dlq", "text": "看故障开关还剩几次，每失败一次减一。为什么按次数？因为最多收三次，三次失败正好进死信，之后再重放一定成功，演示是确定的。", "action": "stage:bad", "highlight": "#stage-detail [data-hl=fault]", "shape": "circle"},
+  {"id": "s18", "part": "p04-payments-dlq", "text": "点到重试。每失败一次，Lambda 都记一行：第几次、错误码、时间。这是值班的人最想知道的，它为什么失败。", "action": "stage:retry", "highlight": "#stage-detail tr[data-attempt=\"3\"]"},
+  {"id": "s19", "part": "p04-payments-dlq", "text": "第三次以后，消息进了死信，被重放工具归档。原因是下游不可用，这种是可以重放的。下一步，去工具里处理它。", "action": "stage:dlq", "highlight": "#stage-detail [data-hl=dlq-code]"},
+
+  {"id": "s20", "part": "p05-replay", "text": "这一段讲重放工具。先用值班的账号登录，然后按 hold 搜索。", "action": "login", "highlight": "[data-testid=search-q]"},
+  {"id": "s21", "part": "p05-replay", "text": "搜到了这一条，原因、收到几次、状态都在列表里。点开它。", "action": "ops_hold", "highlight": "#results tr[data-mid]"},
+  {"id": "s22", "part": "p05-replay", "text": "看三次失败，每一次都是下游不可用。说明消息本身没问题，问题在当时的下游。", "action": "click:#results tr[data-mid]", "highlight": "#d-attempts tbody"},
+  {"id": "s23", "part": "p05-replay", "text": "再看右边，消息里说的和 hold 现在的状态逐个比。状态还是占用，所以释放还有意义。", "action": "noop", "highlight": "#d-compare tr[data-field=status]"},
+  {"id": "s24", "part": "p05-replay", "text": "先 dry run。它只读不写，告诉你重放会发生什么：从占用到释放，库存加二。", "action": "click:[data-testid=dry-run]", "highlight": "#plan [data-hl=transition]"},
+  {"id": "s25", "part": "p05-replay", "text": "点重放。新消息发回付款队列，这一次下游好了。", "action": "click:[data-testid=replay]", "highlight": "#replay-result [data-hl=new-mid]"},
+  {"id": "s26", "part": "p05-replay", "text": "手滑再点一次会怎样？被拒绝，已经重放过了。认领是一次条件写，五个人同时点也只有一个成功。", "action": "click:[data-testid=replay]", "highlight": "#replay-result b"},
+  {"id": "s27", "part": "p05-replay", "text": "每一次 dry run、重放、被拒绝的重放，都在审计记录里，谁、什么时候、做了什么。", "action": "noop", "highlight": "#audit tbody tr[data-action=replay]"},
+  {"id": "s28", "part": "p05-replay", "text": "回到教学页面，支线最后一步亮了，库存回来了。", "action": "run:dlq", "highlight": ".timeline li[data-stage=released]"},
+
+  {"id": "s29", "part": "p06-sharding", "text": "这一段讲热点。秒杀的时候，几百个请求同时写同一行库存。先建一个只有一个分片的商品。", "action": "goto:/checkout", "highlight": "[data-testid=shards]"},
+  {"id": "s30", "part": "p06-sharding", "text": "两百件，两百单，三十二个并发，点并发下单。", "action": "checkout_new:1:200", "highlight": "#shard-bars"},
+  {"id": "s31", "part": "p06-sharding", "text": "看冲突放弃这一格。为什么有人没抢到？库存其实还有，是重试十二次都被别人抢先写了，只好返回请稍后再试。", "action": "checkout_go:200", "highlight": "[data-hl=r-contention]", "shape": "circle"},
+  {"id": "s32", "part": "p06-sharding", "text": "同样的两百件，拆成八个分片，再来一次。", "action": "checkout_new:8:200", "highlight": "#shard-bars"},
+  {"id": "s33", "part": "p06-sharding", "text": "冲突放弃降下来了，每单冲突次数也少了。超卖两次都是零，正确性靠条件写，分片解决的是冲突。", "action": "checkout_go:200", "highlight": "[data-hl=r-oversold]", "shape": "circle"},
+
+  {"id": "s34", "part": "p07-eventlog", "text": "这一段讲事件日志。回到第一单，点到写进对象存储这一步。", "action": "run:payment_failed", "highlight": ".timeline li[data-stage=s3]"},
+  {"id": "s35", "part": "p07-eventlog", "text": "看这个路径，按日期和小时分区。每一次状态变化，由 DynamoDB Streams 交给一个 Lambda，写成一行 JSON。", "action": "stage:s3", "highlight": "#stage-detail [data-hl=s3-key]"},
+  {"id": "s36", "part": "p07-eventlog", "text": "点到 DuckDB。看释放率这一格。AWS 上用 Athena 跑这条 SQL，本地用 DuckDB 跑同一条，算出每个商品的过期率和释放率，拿来调 hold 的时长。", "action": "stage:duckdb", "highlight": "#stage-detail table[data-table=rates] td[data-col=release_rate]", "shape": "circle"},
+
+  {"id": "s37", "part": "p08-observability", "text": "这一段讲观测。这个 trace 链接，从 API 到队列再到 Lambda，在 Jaeger 里是同一条。消息里带着上一跳的 trace 编号。", "action": "trace", "highlight": "[data-testid=trace-link]"},
+  {"id": "s38", "part": "p08-observability", "text": "告警在重放工具顶部。看这一格，十五分钟内进了多少死信。几分钟之内就能看到，Prometheus 里是同一套阈值。", "action": "goto:/ops", "highlight": "#alerts [data-alert=DLQRedriveVolume]"},
+
+  {"id": "s39", "part": "p09-learn", "text": "最后一段讲教学模式本身。点面试题。", "action": "goto:/learn", "highlight": ".tabs a[data-tab=interview]"},
+  {"id": "s40", "part": "p09-learn", "text": "每一题先给一句话答案，再展开，再给追问。点开第一题，讲讲这个项目。", "action": "click:.tabs a[data-tab=interview]", "highlight": "details.qa[data-q=\"1\"] summary"},
+  {"id": "s41", "part": "p09-learn", "text": "看这一句。答案都落在这个仓库的代码和实测数据上，仓库的数字和简历上的数字分开讲。", "action": "click:details.qa[data-q=\"1\"] summary", "highlight": "details.qa[data-q=\"1\"] .answer p"},
+  {"id": "s42", "part": "p09-learn", "text": "再看日常问题，点开超卖这一题，现象、定位、修复、证明都在里面，还有逐行讲代码的视频。", "action": "click:.tabs a[data-tab=problems]", "highlight": "details[data-problem=q07-oversell] summary"},
+  {"id": "s43", "part": "p09-learn", "text": "看这一段测试输出，关掉保护以后超卖二十件。总结一下：条件写不超卖，幂等防重复，最终释放不用锁，死信能安全地重放。", "action": "click:details[data-problem=q07-oversell] summary", "highlight": "details[data-problem=q07-oversell] pre"}
+]

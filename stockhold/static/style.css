@@ -44,3 +44,25 @@ tr.mismatch td { background: #fef2f2; }
 .bar { display: grid; grid-template-columns: 70px 1fr 90px 50px; align-items: center; gap: 10px; font-size: 13px; }
 .bar i { display: block; height: 14px; background: linear-gradient(90deg, #60a5fa, #2563eb); border-radius: 4px; min-width: 2px; }
 .bar em { color: var(--muted); font-style: normal; }
+.tabs { display: flex; gap: 4px; margin-bottom: 12px; }
+.tabs a { padding: 6px 16px; border-radius: 8px 8px 0 0; color: var(--muted); text-decoration: none; border: 1px solid transparent; }
+.tabs a.on { background: var(--card); color: var(--ink); border-color: var(--line); border-bottom-color: var(--card); font-weight: 600; }
+.learn-grid { display: grid; grid-template-columns: 330px 1fr; gap: 16px; align-items: start; }
+.timeline { list-style: none; padding: 0; margin: 0 0 12px; }
+.timeline li { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; cursor: pointer; border: 1px solid transparent; }
+.timeline li:hover { background: #f3f4f6; } .timeline li.sel { border-color: var(--accent); background: #eff6ff; }
+.timeline .dot { width: 14px; height: 14px; border-radius: 50%; background: #d1d5db; flex: none; }
+.timeline li[data-status=active] .dot { background: #f59e0b; box-shadow: 0 0 0 4px rgba(245,158,11,.25); }
+.timeline li[data-status=done] .dot { background: var(--ok); }
+.timeline li[data-status=done] .t { font-weight: 600; }
+.timeline .t { flex: 1; }
+.video-btn { padding: 2px 8px; font-size: 12px; }
+.pill.done { background: #d1fae5; color: var(--ok); } .pill.active { background: #fef3c7; color: var(--warn); }
+.kv td:first-child { color: var(--muted); width: 120px; }
+.srcs { margin-top: 14px; display: flex; gap: 12px; flex-wrap: wrap; }
+a.src-link { font-size: 13px; color: var(--accent); }
+.doc details.qa { border: 1px solid var(--line); border-radius: 8px; margin: 8px 0; padding: 8px 12px; }
+.doc details.qa summary { cursor: pointer; font-weight: 600; }
+.doc .answer { margin-top: 8px; } .doc table { border-collapse: collapse; } .doc td, .doc th { border: 1px solid var(--line); padding: 4px 8px; }
+#stage-detail pre { white-space: pre-wrap; word-break: break-all; }
+@media (max-width: 900px) { .learn-grid { grid-template-columns: 1fr; } }

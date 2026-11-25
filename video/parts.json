@@ -1,0 +1,11 @@
+[
+  {"part": "p01-reserve", "title": "下单：条件写扣库存，绝不超卖", "stage": "reserve", "chapter": "01-reserve"},
+  {"part": "p02-idempotency", "title": "幂等：重复的消息只释放一次", "stage": "lambda", "chapter": "02-idempotency"},
+  {"part": "p03-expiry", "title": "过期释放：延迟消息和 sweeper", "stage": "enqueue", "chapter": "03-expiry"},
+  {"part": "p04-payments-dlq", "title": "付款失败、重试、进死信", "stage": "retry", "chapter": "04-payments-dlq"},
+  {"part": "p05-replay", "title": "DLQ 重放工具：dry-run 和最多一次的重放", "stage": "replay", "chapter": "05-replay-tool"},
+  {"part": "p06-sharding", "title": "热点 key：一个分片对八个分片", "stage": null, "chapter": "06-hot-key-sharding"},
+  {"part": "p07-eventlog", "title": "事件日志进 S3，DuckDB 算过期率", "stage": "duckdb", "chapter": "07-event-log"},
+  {"part": "p08-observability", "title": "一条 trace 穿过队列，告警在工具顶部", "stage": null, "chapter": "08-observability"},
+  {"part": "p09-learn", "title": "教学模式本身：源码锚点、面试题、日常问题", "stage": null, "chapter": "09-learn-mode"}
+]

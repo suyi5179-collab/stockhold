@@ -20,3 +20,4 @@ stockhold/static/videos/
 *.mp4
 !docs/videos/**/*.mp4
 .DS_Store
+video/timeline.json

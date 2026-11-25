@@ -1,0 +1,39 @@
+{% extends "learn_base.html" %}
+{% block learn %}
+<section class="card">
+  <div class="row">
+    <button class="primary" data-testid="learn-submit" data-scenario="payment_failed">提交样例</button>
+    <button data-scenario="timeout" data-testid="learn-submit-timeout">超时样例</button>
+    <button data-scenario="dlq" data-testid="learn-submit-dlq">坏消息样例</button>
+    <span id="run-info" class="muted" data-testid="run-info">点「提交样例」：真的下一单，下面每一步的状态和数据都从后端实时读。</span>
+  </div>
+</section>
+<div class="learn-grid">
+  <section class="card">
+    <h2>主线</h2>
+    <ol class="timeline" id="learn-timeline">
+      {% for s in main %}
+      <li data-stage="{{ s.id }}" data-status="pending" data-part="{{ s.part }}" data-testid="step-{{ s.id }}">
+        <span class="dot"></span><span class="t">{{ s.title }}</span>
+        <button class="video-btn" data-part="{{ s.part }}" title="看讲解视频">▶</button>
+      </li>
+      {% endfor %}
+    </ol>
+    <h2 class="branch-h" id="branch-h" hidden>支线：坏消息</h2>
+    <ol class="timeline" id="learn-branch" hidden>
+      {% for s in branch %}
+      <li data-stage="{{ s.id }}" data-status="pending" data-part="{{ s.part }}" data-testid="step-{{ s.id }}">
+        <span class="dot"></span><span class="t">{{ s.title }}</span>
+        <button class="video-btn" data-part="{{ s.part }}" title="看讲解视频">▶</button>
+      </li>
+      {% endfor %}
+    </ol>
+  </section>
+  <section class="card" id="stage-detail" data-testid="stage-detail">
+    <p class="muted">提交以后，点左边任意一步，看它的真实数据。</p>
+  </section>
+</div>
+<section class="card" id="video-box" data-testid="video-box" hidden></section>
+<script>window.LEARN_STEPS = {{ {"main": main, "branch": branch} | tojson }};</script>
+<script src="{{ url_for('static', filename='learn.js') }}"></script>
+{% endblock %}

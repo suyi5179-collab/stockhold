@@ -1,0 +1,51 @@
+name: ci
+on: [push, pull_request]
+
+jobs:
+  checks:
+    # No AWS needed: anchors, the problem-video sources, CDK synth, unit tests.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: node scripts/check_anchors.mjs
+      - run: python -m venv .venv && .venv/bin/pip install -r requirements.txt
+      - run: .venv/bin/python scripts/build_problem_videos.py > /dev/null
+      - name: cdk synth
+        run: ./scripts/build_lambda.sh && cd infra && npm ci && npx cdk synth --quiet
+      - name: unit tests (no LocalStack)
+        run: .venv/bin/python -m pytest tests/test_unit_states.py "tests/test_eventlog.py::test_duckdb_sql_on_a_fixed_event_log" "tests/test_eventlog.py::test_stream_records_become_events_only_on_status_change" -p no:cacheprovider --noconftest -q
+
+  integration:
+    # The whole stack on LocalStack 4.9: deploy with cdklocal, run every test, the failure controls, then the UI.
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      COMPOSE: docker compose
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: python -m venv .venv && .venv/bin/pip install -r requirements.txt
+      - name: LocalStack + Jaeger
+        run: docker compose -p stockhold up -d --wait localstack jaeger
+      - name: deploy the CDK stack with cdklocal
+        run: ./scripts/deploy.sh
+      - name: tests with coverage (real LocalStack)
+        run: .venv/bin/pytest --cov=stockhold --cov-report=term
+      - name: failure controls (must go red, then green again)
+        run: ./scripts/failure_controls.sh && test "$(grep -c ' failed' docs/results/failure_controls.raw.txt)" -ge 2
+      - name: start the app
+        run: |
+          STOCKHOLD_SEED_DEMO=1 .venv/bin/python -m stockhold.seed
+          STOCKHOLD_BACKGROUND=1 .venv/bin/flask --app stockhold.app:create_app run --port 8840 > app.log 2>&1 &
+          for i in $(seq 30); do curl -fs localhost:8840/healthz && break; sleep 1; done
+      - name: e2e (Playwright)
+        run: cd e2e && npm ci && npx playwright install --with-deps chromium && npx playwright test
+      - if: failure()
+        run: tail -100 app.log || true

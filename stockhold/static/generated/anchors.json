@@ -1,0 +1,292 @@
+{
+  "alert-rules": {
+    "path": "deploy/prometheus/rules.yml",
+    "start": 6,
+    "end": 23
+  },
+  "alerts": {
+    "path": "stockhold/dlq.py",
+    "start": 268,
+    "end": 290
+  },
+  "anchor-refs": {
+    "path": "scripts/check_anchors.mjs",
+    "start": 20,
+    "end": 46
+  },
+  "api-schedule": {
+    "path": "stockhold/api.py",
+    "start": 83,
+    "end": 86
+  },
+  "cdk-eventlog": {
+    "path": "infra/app.mjs",
+    "start": 92,
+    "end": 100
+  },
+  "cdk-expiry": {
+    "path": "infra/app.mjs",
+    "start": 60,
+    "end": 74
+  },
+  "cdk-payments": {
+    "path": "infra/app.mjs",
+    "start": 78,
+    "end": 88
+  },
+  "cdk-table": {
+    "path": "infra/app.mjs",
+    "start": 19,
+    "end": 38
+  },
+  "dlq-archive": {
+    "path": "stockhold/dlq.py",
+    "start": 42,
+    "end": 57
+  },
+  "dlq-receive-count": {
+    "path": "stockhold/dlq.py",
+    "start": 81,
+    "end": 82
+  },
+  "dlq-search": {
+    "path": "stockhold/dlq.py",
+    "start": 121,
+    "end": 137
+  },
+  "dry-run": {
+    "path": "stockhold/dlq.py",
+    "start": 188,
+    "end": 208
+  },
+  "duckdb-view": {
+    "path": "stockhold/analytics.py",
+    "start": 21,
+    "end": 23
+  },
+  "expire-handler": {
+    "path": "stockhold/expiry.py",
+    "start": 44,
+    "end": 60
+  },
+  "flash-sale": {
+    "path": "stockhold/flash.py",
+    "start": 21,
+    "end": 61
+  },
+  "idempotent-replay": {
+    "path": "stockhold/inventory.py",
+    "start": 87,
+    "end": 93
+  },
+  "learn-start": {
+    "path": "stockhold/learn.py",
+    "start": 59,
+    "end": 82
+  },
+  "learn-trace": {
+    "path": "stockhold/learn.py",
+    "start": 139,
+    "end": 198
+  },
+  "localstack-memory": {
+    "path": "docker-compose.yml",
+    "start": 15,
+    "end": 20
+  },
+  "localstack-poll": {
+    "path": "docker-compose.yml",
+    "start": 23,
+    "end": 25
+  },
+  "payment-handler": {
+    "path": "stockhold/payments.py",
+    "start": 59,
+    "end": 68
+  },
+  "payments-batch": {
+    "path": "lambdas/payments.py",
+    "start": 26,
+    "end": 32
+  },
+  "q-payments-serial": {
+    "path": "docs/problems/snippets/payments_handler_serial.py",
+    "start": 11,
+    "end": 23
+  },
+  "q01-before": {
+    "path": "docs/problems/snippets/before_fixes.py",
+    "start": 7,
+    "end": 12
+  },
+  "q02-before": {
+    "path": "docs/problems/snippets/before.yml",
+    "start": 8,
+    "end": 11
+  },
+  "q03-before": {
+    "path": "docs/problems/snippets/before_fixes.py",
+    "start": 18,
+    "end": 22
+  },
+  "q04-before": {
+    "path": "docs/problems/snippets/before_fixes.py",
+    "start": 28,
+    "end": 34
+  },
+  "q05-before": {
+    "path": "docs/problems/snippets/before.yml",
+    "start": 15,
+    "end": 16
+  },
+  "q06-before": {
+    "path": "docs/problems/snippets/before_infra.mjs",
+    "start": 4,
+    "end": 10
+  },
+  "record-frame": {
+    "path": "video/record.mjs",
+    "start": 32,
+    "end": 80
+  },
+  "record-pacing": {
+    "path": "video/record.mjs",
+    "start": 189,
+    "end": 200
+  },
+  "release-transact": {
+    "path": "stockhold/inventory.py",
+    "start": 254,
+    "end": 260
+  },
+  "release-unsafe": {
+    "path": "stockhold/inventory.py",
+    "start": 278,
+    "end": 284
+  },
+  "replay": {
+    "path": "stockhold/dlq.py",
+    "start": 217,
+    "end": 247
+  },
+  "replay-endpoint": {
+    "path": "stockhold/ops.py",
+    "start": 91,
+    "end": 100
+  },
+  "request-span": {
+    "path": "stockhold/app.py",
+    "start": 35,
+    "end": 47
+  },
+  "require-role": {
+    "path": "stockhold/auth.py",
+    "start": 69,
+    "end": 82
+  },
+  "reserve-transact": {
+    "path": "stockhold/inventory.py",
+    "start": 144,
+    "end": 157
+  },
+  "reserve-unsafe": {
+    "path": "stockhold/inventory.py",
+    "start": 181,
+    "end": 188
+  },
+  "schedule-expiry": {
+    "path": "stockhold/expiry.py",
+    "start": 26,
+    "end": 31
+  },
+  "source-url": {
+    "path": "stockhold/static/learn_common.js",
+    "start": 4,
+    "end": 8
+  },
+  "sql-rates": {
+    "path": "sql/rates_by_product.sql",
+    "start": 3,
+    "end": 17
+  },
+  "sql-recommend": {
+    "path": "sql/hold_timeout_recommendation.sql",
+    "start": 4,
+    "end": 16
+  },
+  "state-machine": {
+    "path": "stockhold/states.py",
+    "start": 8,
+    "end": 12
+  },
+  "stream-to-event": {
+    "path": "stockhold/eventlog.py",
+    "start": 27,
+    "end": 44
+  },
+  "sweeper": {
+    "path": "stockhold/expiry.py",
+    "start": 77,
+    "end": 87
+  },
+  "test-auth": {
+    "path": "tests/test_api.py",
+    "start": 50,
+    "end": 59
+  },
+  "test-duplicate-release": {
+    "path": "tests/test_idempotency.py",
+    "start": 63,
+    "end": 72
+  },
+  "test-eventlog-e2e": {
+    "path": "tests/test_eventlog.py",
+    "start": 41,
+    "end": 53
+  },
+  "test-expiry-e2e": {
+    "path": "tests/test_expiry.py",
+    "start": 24,
+    "end": 33
+  },
+  "test-flash-sale": {
+    "path": "tests/test_sharding.py",
+    "start": 36,
+    "end": 42
+  },
+  "test-oversell": {
+    "path": "tests/test_reserve.py",
+    "start": 68,
+    "end": 81
+  },
+  "test-poison-dlq": {
+    "path": "tests/test_payments.py",
+    "start": 60,
+    "end": 79
+  },
+  "test-replay-safety": {
+    "path": "tests/test_replay.py",
+    "start": 56,
+    "end": 76
+  },
+  "test-sweeper": {
+    "path": "tests/test_expiry.py",
+    "start": 63,
+    "end": 75
+  },
+  "test-trace-e2e": {
+    "path": "tests/test_observability.py",
+    "start": 50,
+    "end": 69
+  },
+  "test-unique-keys": {
+    "path": "tests/test_idempotency.py",
+    "start": 11,
+    "end": 18
+  },
+  "transition-guard": {
+    "path": "stockhold/inventory.py",
+    "start": 237,
+    "end": 244
+  }
+}

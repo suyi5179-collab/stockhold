@@ -7,12 +7,16 @@ from stockhold.states import RELEASED, IdempotencyKeyReused
 from .conftest import run_concurrently
 
 
+# @learn:test-unique-keys
 def test_same_key_returns_the_same_hold(new_sku):
     sku = new_sku(5)
+    # The key carries this run's sku: the table outlives the test run, and an old hold with the same
+    # key and a different body is (correctly) a 422.
     a = inventory.reserve(sku, 2, "o-1", idempotency_key=f"k-1-{sku}")
     b = inventory.reserve(sku, 2, "o-1", idempotency_key=f"k-1-{sku}")
     assert a["hold_id"] == b["hold_id"] and b["replayed"] is True and "replayed" not in a
     assert inventory.stock_report(sku)["available"] == 3
+# @learn:end test-unique-keys
 
 
 def test_same_key_different_request_is_refused(new_sku):

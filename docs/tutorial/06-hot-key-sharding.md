@@ -50,6 +50,7 @@ GSI2（按商品查 hold）也按分片拆：`SKU#<sku>#<k>`。不然所有写�
 
 `/checkout`（要登录）：选商品，或者新建一个「N 件、K 个分片」的商品，填订单数和并发，点「并发下单」。
 后端用线程池真的并发调 reserve（`flash.run`，和压测脚本是同一个函数），返回成功、卖光、冲突放弃、每单冲突次数、p50/p99、超卖，下面的分片条显示每个分片还剩多少、版本号走到了几。
+`tests/test_sharding.py::test_flash_sale_on_eight_shards_never_oversells`（锚点 `test-flash-sale`）：八个分片、六十件、一百单、二十四并发，断言零超卖、八个分片都接到了单。
 
 ## 怎么 checkout 到这一步跑起来
 

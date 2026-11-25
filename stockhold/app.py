@@ -7,7 +7,7 @@ import time
 
 from flask import Flask, Response, g, jsonify, request
 
-from . import api, auth, checkout, metrics, ops, tracing
+from . import api, auth, checkout, learn_web, metrics, ops, tracing
 from .config import settings
 from .states import StockholdError
 
@@ -55,6 +55,7 @@ def create_app() -> Flask:
     app.register_blueprint(api.bp)
     app.register_blueprint(ops.bp)
     app.register_blueprint(checkout.bp)
+    app.register_blueprint(learn_web.bp)
 
     @app.errorhandler(StockholdError)
     def _err(e: StockholdError):

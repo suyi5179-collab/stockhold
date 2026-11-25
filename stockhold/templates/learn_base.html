@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}教学模式 · stockhold{% endblock %}
+{% block main %}
+<nav class="tabs" data-testid="learn-tabs">
+  <a href="/learn" class="{{ 'on' if tab == 'flow' }}" data-tab="flow">流程</a>
+  <a href="/learn/interview" class="{{ 'on' if tab == 'interview' }}" data-tab="interview">面试题</a>
+  <a href="/learn/problems" class="{{ 'on' if tab == 'problems' }}" data-tab="problems">日常问题</a>
+</nav>
+{% block learn %}{% endblock %}
+<script>
+  window.STOCKHOLD = {{ {"repo": repo_url, "sha": git_sha, "anchors": anchors, "jaeger": jaeger_url} | tojson }};
+</script>
+<script src="{{ url_for('static', filename='learn_common.js') }}"></script>
+{% endblock %}
