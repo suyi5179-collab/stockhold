@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const base = process.env.STOCKHOLD_URL || 'http://127.0.0.1:8840'
-const segments = JSON.parse(fs.readFileSync(path.join(here, 'narration.json'), 'utf8'))
+const segments = JSON.parse(fs.readFileSync(process.env.NARRATION || path.join(here, 'narration.json'), 'utf8'))
 const durFile = path.join(here, 'durations.json')
 const durations = fs.existsSync(durFile) ? JSON.parse(fs.readFileSync(durFile, 'utf8')) : {}
 const outDir = path.join(here, 'out')
@@ -113,9 +113,13 @@ async function act(action) {
       await page.goto(base + arg)
       return
     case 'submit': {                 // submit:<scenario>
+      const before = page.url()
       await clickFramed(`[data-scenario="${arg}"]`)
-      await page.waitForURL(/run=/)
+      // The page may already be showing an earlier run (?run=...): wait for the URL of this new one.
+      await page.waitForURL((u) => u.href !== before && u.searchParams.has('run'))
       runs[arg] = new URL(page.url()).searchParams.get('run')
+      // Until the first poll returns, the header still shows the previous order: wait for this run's id.
+      await page.locator('#run-info').filter({ hasText: runs[arg] }).waitFor()
       holds[arg] = (await page.locator('[data-testid=hold-id]').textContent()).trim()
       return
     }

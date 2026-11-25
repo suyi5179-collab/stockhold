@@ -95,22 +95,22 @@ Playwright: **6 passed** (learn flow with stage order, DLQ branch through the re
 
 ```
 ### STOCKHOLD_SABOTAGE=(none)
-2 passed in 1.29s
+2 passed in 1.76s
 
 ### STOCKHOLD_SABOTAGE=no_condition
-E       AssertionError: {'sku': 't-fe14f3780f', 'capacity': 10, 'available': 9, 'held': 30, ...}
+E       AssertionError: {'sku': 't-7af9f16716', 'capacity': 10, 'available': 8, 'held': 30, ...}
 E       assert 20 == 0
 FAILED tests/test_reserve.py::test_concurrent_checkouts_never_oversell - Asse...
-1 failed, 1 passed in 0.85s
+1 failed, 1 passed in 1.11s
 
 ### STOCKHOLD_SABOTAGE=no_release_guard
-E       AssertionError: {'sku': 't-53e9add76d', 'capacity': 5, 'available': 19, 'held': 0, ...}
+E       AssertionError: {'sku': 't-306572cb6e', 'capacity': 5, 'available': 19, 'held': 0, ...}
 E       assert 19 == 5
 FAILED tests/test_idempotency.py::test_duplicate_payment_failures_release_once
-1 failed, 1 passed in 1.35s
+1 failed, 1 passed in 1.60s
 
 ### STOCKHOLD_SABOTAGE=(none)
-2 passed in 1.67s
+2 passed in 2.52s
 ```
 
 | protection switched off | what the test sees |

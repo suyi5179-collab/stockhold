@@ -151,8 +151,8 @@
   },
   "record-pacing": {
     "path": "video/record.mjs",
-    "start": 189,
-    "end": 200
+    "start": 193,
+    "end": 204
   },
   "release-transact": {
     "path": "stockhold/inventory.py",
