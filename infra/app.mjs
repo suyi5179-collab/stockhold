@@ -39,7 +39,10 @@ table.addGlobalSecondaryIndex({
 // @learn:end cdk-table
 
 const code = lambda.Code.fromAsset(path.join(here, '../build/lambda'))
+// Lambdas run in containers on the compose network: Jaeger is reachable by its service name.
+const otel = app.node.tryGetContext('otelEndpoint') ?? 'http://jaeger:4318'
 const env = {
+  OTEL_EXPORTER_OTLP_ENDPOINT: otel,
   STOCKHOLD_TABLE: table.tableName,
   STOCKHOLD_EXPIRY_QUEUE: 'stockhold-hold-expiry',
   STOCKHOLD_PAYMENTS_QUEUE: 'stockhold-payment-events',
@@ -47,7 +50,7 @@ const env = {
 const fn = (id, handler, extra = {}, timeoutS = 30) => {
   const f = new lambda.Function(stack, id, {
     functionName: `stockhold-${id.toLowerCase()}`, runtime: lambda.Runtime.PYTHON_3_11, handler, code,
-    memorySize: 256, timeout: cdk.Duration.seconds(timeoutS), environment: { ...env, ...extra },
+    memorySize: 256, timeout: cdk.Duration.seconds(timeoutS), environment: { ...env, OTEL_SERVICE_NAME: `stockhold-${id.toLowerCase()}`, ...extra },
   })
   table.grantReadWriteData(f)
   return f

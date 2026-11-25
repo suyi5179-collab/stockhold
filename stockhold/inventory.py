@@ -9,7 +9,7 @@ import uuid
 
 from botocore.exceptions import ClientError
 
-from . import keys, states
+from . import keys, states, tracing
 from .aws import ddb
 from .config import settings
 from .dynamo import cancellation_codes, error_code, item, plain, vals
@@ -96,6 +96,14 @@ def _existing(hold_id: str, req_hash: str) -> dict | None:
 
 def reserve(sku: str, qty: int, order_id: str, hold_seconds: int | None = None, hold_id: str | None = None,
             client: str = "anonymous", idempotency_key: str | None = None) -> dict:
+    with tracing.span("inventory.reserve", sku=sku, qty=qty) as sp:
+        h = _reserve(sku, qty, order_id, hold_seconds, hold_id, client, idempotency_key)
+        sp.update(hold_id=h["hold_id"], shard=h["shard"], attempts=h["reserve"]["attempts"],
+                  conflicts=h["reserve"]["conflicts"], replayed=bool(h.get("replayed")))
+        return h
+
+
+def _reserve(sku, qty, order_id, hold_seconds, hold_id, client, idempotency_key) -> dict:
     """Hold `qty` units of `sku` for an order. Returns the hold.
 
     With an idempotency key the hold id is derived from (client, key): a retried request finds the
@@ -204,6 +212,13 @@ def get_hold(hold_id: str) -> dict:
 
 
 def transition(hold_id: str, to: str, by: str, reason: str = "") -> dict:
+    with tracing.span("hold.transition", hold_id=hold_id, to=to, by=by) as sp:
+        r = _transition(hold_id, to, by, reason)
+        sp["changed"] = r["changed"]
+        return r
+
+
+def _transition(hold_id: str, to: str, by: str, reason: str = "") -> dict:
     """Move a HELD hold to CONFIRMED, RELEASED or EXPIRED.
 
     Returns {"hold": ..., "changed": bool}. Repeating a transition that already happened is a no-op

@@ -1,0 +1,24 @@
+# CloudWatch alarms in AWS; Prometheus alerting rules here. The replay tool shows the same two DLQ alarms.
+groups:
+  - name: stockhold
+    rules:
+      # @learn:alert-rules
+      - alert: DLQOldestMessageAge
+        expr: stockhold_dlq_oldest_open_age_seconds > 300
+        for: 1m
+        labels: { severity: page }
+        annotations: { summary: "A dead-lettered payment event has waited more than 5 minutes" }
+      - alert: DLQRedriveVolume
+        expr: stockhold_dlq_redriven_15m >= 5
+        labels: { severity: page }
+        annotations: { summary: "5+ payment events dead-lettered in 15 minutes" }
+      - alert: Oversold
+        expr: max(stockhold_oversold_units) > 0
+        labels: { severity: page }
+        annotations: { summary: "More units held or sold than exist. Must never fire." }
+      - alert: ExpiredHoldsNotReleased
+        expr: stockhold_holds_overdue > 0
+        for: 2m
+        labels: { severity: ticket }
+        annotations: { summary: "Holds past expiry still HELD: expiry messages and the sweeper are both behind" }
+      # @learn:end alert-rules

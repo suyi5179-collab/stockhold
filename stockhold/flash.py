@@ -6,7 +6,7 @@ import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 
-from . import inventory
+from . import inventory, metrics
 from .states import Contention, InsufficientStock
 
 
@@ -27,10 +27,15 @@ def run(sku: str, orders: int, concurrency: int, qty: int = 1, client: str = "fl
         t0 = time.perf_counter()
         try:
             h = inventory.reserve(sku, qty, f"flash-{batch}-{i}", client=client, idempotency_key=f"{batch}-{i}")
+            metrics.RESERVE.labels("held").inc()
+            metrics.CONFLICTS.observe(h["reserve"]["conflicts"])
+            metrics.LATENCY.observe(time.perf_counter() - t0)
             return "held", (time.perf_counter() - t0) * 1000, h["reserve"]["attempts"], h["reserve"]["conflicts"], h["shard"]
         except InsufficientStock:
+            metrics.RESERVE.labels("insufficient_stock").inc()
             return "sold_out", (time.perf_counter() - t0) * 1000, 0, 0, None
         except Contention as e:
+            metrics.RESERVE.labels("contention").inc()
             return "contention", (time.perf_counter() - t0) * 1000, e.detail["attempts"], e.detail["conflicts"], None
 
     t0 = time.perf_counter()

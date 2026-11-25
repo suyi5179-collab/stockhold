@@ -10,7 +10,7 @@ import logging
 
 from botocore.exceptions import ClientError
 
-from . import inventory, keys
+from . import inventory, keys, tracing
 from .aws import ddb, queue_url, sqs
 from .config import settings
 from .dynamo import item, plain, vals
@@ -26,7 +26,9 @@ def schedule(hold: dict) -> dict:
     remaining = max(0, (hold["expires_at_ms"] - inventory.now_ms() + 999) // 1000)
     body = {"type": "hold.expire", "hold_id": hold["hold_id"], "sku": hold["sku"], "expires_at_ms": hold["expires_at_ms"]}
     delay = int(min(remaining, MAX_DELAY))
-    r = sqs().send_message(QueueUrl=queue_url(settings().expiry_queue), MessageBody=json.dumps(body), DelaySeconds=delay)
+    tp = tracing.traceparent()
+    r = sqs().send_message(QueueUrl=queue_url(settings().expiry_queue), MessageBody=json.dumps(body), DelaySeconds=delay,
+                           **({"MessageAttributes": {"traceparent": {"DataType": "String", "StringValue": tp}}} if tp else {}))
     # @learn:end schedule-expiry
     msg = {"message_id": r["MessageId"], "delay_seconds": delay, "body": body, "queue": settings().expiry_queue}
     try:

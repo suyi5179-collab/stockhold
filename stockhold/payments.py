@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 import uuid
 
-from . import faults, inventory
+from . import faults, inventory, tracing
 from .aws import ddb, queue_url, sqs
 from .config import settings
 from .dynamo import item, plain, vals
@@ -33,6 +33,9 @@ def publish(event_type: str, hold_id: str, event_id: str | None = None, extra: d
 
 def publish_raw(raw: str, attributes: dict | None = None) -> dict:
     attrs = {k: {"DataType": "String", "StringValue": str(v)} for k, v in (attributes or {}).items()}
+    tp = tracing.traceparent()
+    if tp:   # the payments Lambda continues this trace (API -> queue -> Lambda in one Jaeger trace)
+        attrs["traceparent"] = {"DataType": "String", "StringValue": tp}
     r = sqs().send_message(QueueUrl=queue_url(settings().payments_queue), MessageBody=raw,
                            **({"MessageAttributes": attrs} if attrs else {}))
     return {"message_id": r["MessageId"], "body": raw}

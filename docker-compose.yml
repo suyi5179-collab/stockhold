@@ -12,6 +12,11 @@ services:
       LAMBDA_RUNTIME_ENVIRONMENT_TIMEOUT: "60"
       DYNAMODB_IN_MEMORY: "1"
       DYNAMODB_HEAP_SIZE: 256m
+      # DynamoDB Streams are served by LocalStack's Kinesis emulator (a Node process). Unbounded, it grew to
+      # 600 MB during the tests; capping the V8 heap makes it collect instead (docs/problems.md q05).
+      NODE_OPTIONS: "--max-old-space-size=160"
+      KINESIS_PERSISTENCE: "0"
+      KINESIS_LATENCY: "100"
       # The SQS poller behind event source mappings backs off up to 10 s when a queue is empty, which
       # made expiry land ~7 s late (docs/problems.md q02). Real SQS long-polls; 1 s is closer to it.
       LAMBDA_EVENT_SOURCE_MAPPING_MAX_BACKOFF_ON_EMPTY_POLL_SEC: "1"
@@ -22,3 +27,35 @@ services:
       test: ["CMD-SHELL", "curl -fs localhost:4566/_localstack/health | grep -q '\"dynamodb\"'"]
       interval: 3s
       retries: 40
+  # X-Ray in AWS: Jaeger receives OTLP from the Flask app (host ports) and from the Lambdas (by name).
+  jaeger:
+    image: jaegertracing/all-in-one:1.76.0
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+      MEMORY_MAX_TRACES: "5000"
+    ports: ["16691:16686", "4327:4317", "4328:4318"]
+    mem_limit: 192m
+  # CloudWatch metrics + alarms in AWS: Prometheus scrapes the Flask app's /metrics and evaluates rules.yml.
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.retention.time=6h"]
+    volumes:
+      - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./deploy/prometheus/rules.yml:/etc/prometheus/rules.yml:ro
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    ports: ["9191:9090"]
+    mem_limit: 192m
+  # CloudWatch dashboards in AWS: the dashboard JSON is provisioned from the repo.
+  grafana:
+    image: grafana/grafana:12.2.1
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/stockhold.json
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+    volumes:
+      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports: ["3091:3000"]
+    mem_limit: 192m

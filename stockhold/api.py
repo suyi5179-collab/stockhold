@@ -3,7 +3,10 @@ from __future__ import annotations
 
 from flask import Blueprint, g, jsonify, request
 
-from . import auth, expiry, inventory, payments
+import time
+
+from . import auth, expiry, inventory, metrics, payments
+from .states import StockholdError
 from .states import ValidationError
 
 bp = Blueprint("api", __name__, url_prefix="/v1")
@@ -66,8 +69,16 @@ def reserve():
     key = request.headers.get("Idempotency-Key", "").strip()
     if not key or len(key) > 128:
         raise ValidationError("an Idempotency-Key header (1-128 chars) is required")
-    hold = inventory.reserve(str(d.get("sku", "")), qty, str(d.get("order_id", "")), hold_seconds,
-                             client=client_id(), idempotency_key=key)
+    t0 = time.perf_counter()
+    try:
+        hold = inventory.reserve(str(d.get("sku", "")), qty, str(d.get("order_id", "")), hold_seconds,
+                                 client=client_id(), idempotency_key=key)
+    except StockholdError as e:
+        metrics.RESERVE.labels(e.code.lower()).inc()
+        raise
+    metrics.LATENCY.observe(time.perf_counter() - t0)
+    metrics.CONFLICTS.observe(hold["reserve"]["conflicts"])
+    metrics.RESERVE.labels("replayed" if hold.get("replayed") else "held").inc()
     # @learn:api-schedule
     # A crash between the reserve and this send leaves a hold with no expiry message. A retry of the
     # same request heals it here; if nobody retries, the sweeper expires it.
@@ -87,6 +98,7 @@ def get_hold(hold_id):
 @auth.require(*WRITE)
 def confirm(hold_id):
     r = inventory.confirm(hold_id)
+    metrics.TRANSITIONS.labels("CONFIRMED").inc()
     return jsonify({**r["hold"], "changed": r["changed"]})
 
 
@@ -94,6 +106,7 @@ def confirm(hold_id):
 @auth.require(*WRITE)
 def release(hold_id):
     r = inventory.release(hold_id, by="api", reason="client cancelled")
+    metrics.TRANSITIONS.labels("RELEASED").inc()
     return jsonify({**r["hold"], "changed": r["changed"]})
 
 

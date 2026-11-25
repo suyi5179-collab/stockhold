@@ -5,7 +5,8 @@ import time
 
 from flask import Blueprint, g, jsonify, redirect, render_template, request, session, url_for
 
-from . import auth, dlq, faults, inventory, payments
+from . import auth, dlq, faults, inventory, metrics, payments
+from .states import StockholdError
 from .states import ValidationError
 
 bp = Blueprint("ops", __name__)
@@ -90,7 +91,13 @@ def dry_run(mid):
 @bp.post("/ops/api/messages/<mid>/replay")
 @auth.require("oncall")
 def replay(mid):
-    return jsonify(dlq.replay(mid, actor=g.user["username"]))
+    try:
+        r = dlq.replay(mid, actor=g.user["username"])
+    except StockholdError as e:
+        metrics.REPLAYS.labels(e.code.lower()).inc()
+        raise
+    metrics.REPLAYS.labels("replayed").inc()
+    return jsonify(r)
 # @learn:end replay-endpoint
 
 

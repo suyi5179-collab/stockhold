@@ -5,9 +5,9 @@ import logging
 import threading
 import time
 
-from flask import Flask, jsonify
+from flask import Flask, Response, g, jsonify, request
 
-from . import api, auth, checkout, ops
+from . import api, auth, checkout, metrics, ops, tracing
 from .config import settings
 from .states import StockholdError
 
@@ -28,6 +28,29 @@ def _background_sync() -> None:
 def create_app() -> Flask:
     app = Flask(__name__)
     app.secret_key = settings().secret
+    tracing.setup_sdk()
+    metrics.register()
+
+    # @learn:request-span
+    @app.before_request
+    def _start_span():
+        if request.path.startswith(("/static", "/metrics", "/healthz", "/videos")):
+            return
+        cm = tracing.span(f"{request.method} {request.url_rule.rule if request.url_rule else request.path}",
+                          **{"http.method": request.method, "http.target": request.path})
+        g._span = (cm, cm.__enter__())
+
+    @app.teardown_request
+    def _end_span(exc):
+        sp = g.pop("_span", None)
+        if sp:
+            sp[0].__exit__(None, None, None)
+    # @learn:end request-span
+
+    @app.get("/metrics")
+    def prom():
+        body, ctype = metrics.exposition()
+        return Response(body, content_type=ctype)
     app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax")
     app.register_blueprint(api.bp)
     app.register_blueprint(ops.bp)

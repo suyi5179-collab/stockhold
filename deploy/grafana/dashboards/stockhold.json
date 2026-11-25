@@ -1,0 +1,223 @@
+{
+ "uid": "stockhold",
+ "title": "stockhold",
+ "schemaVersion": 39,
+ "time": {
+  "from": "now-30m",
+  "to": "now"
+ },
+ "refresh": "5s",
+ "panels": [
+  {
+   "id": 1,
+   "type": "timeseries",
+   "title": "Reservations per second by outcome",
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 0,
+    "y": 0
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "sum by (outcome) (rate(stockhold_reservations_total[1m]))",
+     "legendFormat": "{{outcome}}"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "reqps"
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 2,
+   "type": "timeseries",
+   "title": "Reserve latency p50 / p99",
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 12,
+    "y": 0
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "histogram_quantile(0.5, sum by (le) (rate(stockhold_reserve_seconds_bucket[1m])))",
+     "legendFormat": "p50"
+    },
+    {
+     "refId": "B",
+     "expr": "histogram_quantile(0.99, sum by (le) (rate(stockhold_reserve_seconds_bucket[1m])))",
+     "legendFormat": "p99"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "s"
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 3,
+   "type": "timeseries",
+   "title": "Conflicts per reservation (mean)",
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 0,
+    "y": 8
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "sum(rate(stockhold_reserve_conflicts_sum[1m])) / sum(rate(stockhold_reserve_conflicts_count[1m]))",
+     "legendFormat": "conflicts"
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "type": "stat",
+   "title": "Oversold units (must be 0)",
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 12,
+    "y": 8
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "max(stockhold_oversold_units)",
+     "legendFormat": "oversold"
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "type": "timeseries",
+   "title": "Payment events queue depth",
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 0,
+    "y": 16
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "stockhold_queue_messages{queue=\"stockhold-payment-events\"}",
+     "legendFormat": "{{state}}"
+    },
+    {
+     "refId": "B",
+     "expr": "stockhold_queue_messages{queue=\"stockhold-hold-expiry\"}",
+     "legendFormat": "expiry {{state}}"
+    }
+   ]
+  },
+  {
+   "id": 6,
+   "type": "timeseries",
+   "title": "Dead letters: open, oldest age, redriven (15 min)",
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 12,
+    "y": 16
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "stockhold_dlq_open",
+     "legendFormat": "open"
+    },
+    {
+     "refId": "B",
+     "expr": "stockhold_dlq_oldest_open_age_seconds",
+     "legendFormat": "oldest age s"
+    },
+    {
+     "refId": "C",
+     "expr": "stockhold_dlq_redriven_15m",
+     "legendFormat": "redriven 15m"
+    }
+   ]
+  },
+  {
+   "id": 7,
+   "type": "timeseries",
+   "title": "Holds past expiry still HELD",
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 0,
+    "y": 24
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "stockhold_holds_overdue",
+     "legendFormat": "overdue"
+    }
+   ]
+  },
+  {
+   "id": 8,
+   "type": "timeseries",
+   "title": "Replays by result",
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 12,
+    "y": 24
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "sum by (result) (increase(stockhold_replays_total[5m]))",
+     "legendFormat": "{{result}}"
+    }
+   ]
+  }
+ ],
+ "tags": [
+  "stockhold"
+ ]
+}
