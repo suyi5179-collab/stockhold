@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}DLQ 重放工具 · stockhold{% endblock %}
+{% block main %}
+<section id="alerts" class="alerts" data-testid="alerts"><span class="muted">加载告警…</span></section>
+
+<section class="card">
+  <h1>死信消息</h1>
+  <form id="search" class="row">
+    <input name="q" placeholder="hold id / sku / message id / 正文" data-testid="search-q">
+    <select name="code" data-testid="search-code">
+      <option value="">全部原因</option>
+      <option>MALFORMED_EVENT</option><option>HOLD_NOT_FOUND</option>
+      <option>DOWNSTREAM_UNAVAILABLE</option><option>HOLD_EXPIRED</option><option>INVALID_TRANSITION</option>
+    </select>
+    <select name="status"><option value="">全部状态</option><option>OPEN</option><option>REPLAYED</option></select>
+    <select name="since_min"><option value="">任何时间</option><option value="15">最近 15 分钟</option><option value="60">最近 1 小时</option><option value="1440">最近 1 天</option></select>
+    <button type="submit" class="primary" data-testid="search-btn">搜索</button>
+    <button type="button" id="compare-btn" disabled>对比选中的两条</button>
+  </form>
+  <table class="grid" id="results">
+    <thead><tr><th></th><th>时间</th><th>原因</th><th>hold</th><th>sku</th><th>类型</th><th>收到次数</th><th>状态</th></tr></thead>
+    <tbody></tbody>
+  </table>
+</section>
+
+<section class="card" id="detail" hidden>
+  <h2>消息详情 <code id="d-mid"></code></h2>
+  <div class="cols">
+    <div>
+      <h3>原消息</h3>
+      <pre id="d-body" data-testid="d-body"></pre>
+      <h3>每次失败</h3>
+      <table class="grid" id="d-attempts"><thead><tr><th>第几次</th><th>错误码</th><th>说明</th></tr></thead><tbody></tbody></table>
+    </div>
+    <div>
+      <h3>原消息 vs 当前 hold</h3>
+      <table class="grid" id="d-compare"><thead><tr><th>字段</th><th>消息里</th><th>现在</th></tr></thead><tbody></tbody></table>
+      <details id="d-hold-box"><summary>当前 hold 的完整 JSON</summary><pre id="d-hold"></pre></details>
+    </div>
+  </div>
+  <div class="row actions">
+    <button id="dry-run" data-testid="dry-run">Dry-run：看会发生什么</button>
+    <button id="replay" class="danger" data-testid="replay" {% if user.role != 'oncall' %}disabled title="需要 oncall 角色"{% endif %}>重放</button>
+    {% if user.role != 'oncall' %}<span class="muted" data-testid="replay-needs-role">重放需要 oncall 角色</span>{% endif %}
+  </div>
+  <div id="plan" class="plan" data-testid="plan" hidden></div>
+  <div id="replay-result" class="plan" data-testid="replay-result" hidden></div>
+</section>
+
+<section class="card" id="diff-card" hidden>
+  <h2>两条消息对比</h2>
+  <table class="grid" id="diff"><thead><tr><th>字段</th><th>A</th><th>B</th></tr></thead><tbody></tbody></table>
+</section>
+
+<section class="card">
+  <h2>审计记录</h2>
+  <table class="grid" id="audit" data-testid="audit"><thead><tr><th>时间</th><th>谁</th><th>动作</th><th>消息</th><th>结果</th></tr></thead><tbody></tbody></table>
+</section>
+
+{% if user.role == 'oncall' %}
+<section class="card">
+  <h2>演练：造一条坏消息</h2>
+  <div class="row">
+    <button data-drill="fault" data-testid="drill-fault">下游故障三次（之后可重放）</button>
+    <button data-drill="unknown">引用不存在的 hold</button>
+    <button data-drill="malformed">畸形 JSON</button>
+    <span id="drill-out" class="muted"></span>
+  </div>
+</section>
+{% endif %}
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='ops.js') }}"></script>{% endblock %}

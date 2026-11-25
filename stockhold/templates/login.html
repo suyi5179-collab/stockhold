@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}登录 · stockhold{% endblock %}
+{% block main %}
+<section class="card narrow">
+  <h1>登录</h1>
+  <p class="muted">本地演示账号：<code>oncall / oncall-demo</code>（可以重放）、<code>viewer / viewer-demo</code>（只读）。只在 <code>STOCKHOLD_SEED_DEMO=1</code> 时创建。</p>
+  {% if error %}<p class="error" data-testid="login-error">{{ error }}</p>{% endif %}
+  <form method="post" action="/login">
+    <input type="hidden" name="next" value="{{ next }}">
+    <label>用户名 <input name="username" autocomplete="username" required></label>
+    <label>密码 <input name="password" type="password" autocomplete="current-password" required></label>
+    <button type="submit" class="primary">登录</button>
+  </form>
+</section>
+{% endblock %}

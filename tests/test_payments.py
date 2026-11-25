@@ -3,26 +3,28 @@ import json
 import time
 
 from stockhold import faults, inventory, payments
-from stockhold.aws import queue_url, sqs
-from stockhold.config import settings
 from stockhold.states import CONFIRMED, HELD, RELEASED
 
 from .test_expiry import wait_status
 
 
 def find_in_dlq(message_ids: set, timeout=60) -> dict:
-    """Receive from the DLQ until every id is seen; delete what we found so the DLQ stays clean."""
+    """Wait until every message has been dead-lettered and archived by the replay tool's sync.
+
+    (Archiving moves it out of the SQS DLQ. A running demo server also syncs in the background,
+    so this must not assume it is the only reader of the DLQ.)
+    """
+    from stockhold import dlq
     found, t0 = {}, time.time()
-    url = queue_url(settings().payments_dlq)
     while set(found) != message_ids and time.time() - t0 < timeout:
-        r = sqs().receive_message(QueueUrl=url, MaxNumberOfMessages=10, WaitTimeSeconds=1, VisibilityTimeout=2,
-                                  AttributeNames=["All"])
-        for m in r.get("Messages", []):
-            if m["MessageId"] in message_ids:
-                found[m["MessageId"]] = m
-                sqs().delete_message(QueueUrl=url, ReceiptHandle=m["ReceiptHandle"])
+        dlq.sync()
+        for mid in message_ids - set(found):
+            rec = dlq._find(mid)
+            if rec:
+                found[mid] = rec
+        time.sleep(1)
     missing = message_ids - set(found)
-    assert not missing, f"not in DLQ after {timeout}s: {missing}"
+    assert not missing, f"not dead-lettered after {timeout}s: {missing}"
     return found
 
 
@@ -72,7 +74,7 @@ def test_bad_messages_are_retried_then_dead_lettered_with_a_reason(new_sku):
         f = payments.failures(mid)
         assert f["last_code"] == code, (code, f)
         assert [a["receive_count"] for a in f["attempts"]] == [1, 2, 3]      # maxReceiveCount = 3
-        assert int(dlq[mid]["Attributes"]["ApproximateReceiveCount"]) >= 3
+        assert dlq[mid]["receive_count"] >= 3 and dlq[mid]["code"] == code
     assert inventory.get_hold(flaky["hold_id"])["status"] == HELD          # nothing half-applied
     assert faults.get(flaky["hold_id"])["remaining"] == 0
 # @learn:end test-poison-dlq

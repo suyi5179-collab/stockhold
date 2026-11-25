@@ -76,14 +76,12 @@ def test_sweeper_expires_a_hold_whose_message_was_lost(new_sku):
 # @learn:end test-sweeper
 
 
-def test_api_retry_heals_a_missing_expiry_message(new_sku):
-    from stockhold.app import create_app
+def test_api_retry_heals_a_missing_expiry_message(new_sku, api, users):
     sku = new_sku(2)
-    c = create_app().test_client()
-    hold = inventory.reserve(sku, 1, "o-9", idempotency_key=f"heal-{sku}")   # committed, never scheduled
-    assert "expiry_message" not in hold
-    r = c.post("/v1/reservations", json={"sku": sku, "qty": 1, "order_id": "o-9"},
-               headers={"Idempotency-Key": f"heal-{sku}"})
+    hold = inventory.reserve(sku, 1, "o-9", client=users["storefront"], idempotency_key=f"heal-{sku}")
+    assert "expiry_message" not in hold                                       # committed, never scheduled
+    r = api.post("/v1/reservations", json={"sku": sku, "qty": 1, "order_id": "o-9"},
+                 headers=api.auth(**{"Idempotency-Key": f"heal-{sku}"}))
     assert r.status_code == 200 and r.json["expiry_message"]["body"]["hold_id"] == hold["hold_id"]
     assert inventory.get_hold(hold["hold_id"])["expiry_message"]["message_id"]
 

@@ -18,6 +18,10 @@ class Settings:
     table: str = field(default_factory=lambda: _env("STOCKHOLD_TABLE", "stockhold"))
     payments_queue: str = field(default_factory=lambda: _env("STOCKHOLD_PAYMENTS_QUEUE", "stockhold-payment-events"))
     payments_dlq: str = field(default_factory=lambda: _env("STOCKHOLD_PAYMENTS_DLQ", "stockhold-payment-events-dlq"))
+    # Signs API tokens and the ops tool's session cookie. The default is a dev placeholder.
+    secret: str = field(default_factory=lambda: _env("STOCKHOLD_SECRET", "dev-only-placeholder-change-me-in-production"))
+    token_ttl_seconds: int = field(default_factory=lambda: int(_env("STOCKHOLD_TOKEN_TTL", "3600")))
+    background: bool = field(default_factory=lambda: _env("STOCKHOLD_BACKGROUND", "0") == "1")
     expiry_queue: str = field(default_factory=lambda: _env("STOCKHOLD_EXPIRY_QUEUE", "stockhold-hold-expiry"))
     # The sweeper only touches holds this far past expiresAt: the delayed message gets the first chance.
     sweep_grace_ms: int = field(default_factory=lambda: int(_env("STOCKHOLD_SWEEP_GRACE_MS", "5000")))

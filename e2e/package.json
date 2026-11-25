@@ -1,0 +1,7 @@
+{
+  "name": "stockhold-e2e",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "playwright test", "record": "node ../video/record.mjs" },
+  "devDependencies": { "@playwright/test": "1.57.0" }
+}

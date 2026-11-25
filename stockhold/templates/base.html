@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}stockhold{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="/learn">stockhold</a>
+    <nav>
+      <a href="/learn" data-nav="learn">教学模式</a>
+      <a href="/checkout" data-nav="checkout">结账模拟</a>
+      <a href="/ops" data-nav="ops">DLQ 重放工具</a>
+    </nav>
+    <span class="who">
+      {% if session.user %}{{ session.user.username }} · {{ session.user.role }}
+        <form method="post" action="/logout" class="inline"><button class="link" type="submit">登出</button></form>
+      {% else %}<a href="/login">登录</a>{% endif %}
+    </span>
+  </header>
+  <main>{% block main %}{% endblock %}</main>
+  {% block scripts %}{% endblock %}
+</body>
+</html>
