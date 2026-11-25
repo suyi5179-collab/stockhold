@@ -5,7 +5,8 @@ import * as ddb from 'aws-cdk-lib/aws-dynamodb'
 import * as events from 'aws-cdk-lib/aws-events'
 import * as targets from 'aws-cdk-lib/aws-events-targets'
 import * as lambda from 'aws-cdk-lib/aws-lambda'
-import { SqsEventSource } from 'aws-cdk-lib/aws-lambda-event-sources'
+import { DynamoEventSource, SqsEventSource } from 'aws-cdk-lib/aws-lambda-event-sources'
+import * as s3 from 'aws-cdk-lib/aws-s3'
 import * as sqs from 'aws-cdk-lib/aws-sqs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -20,6 +21,7 @@ const table = new ddb.Table(stack, 'Table', {
   partitionKey: { name: 'PK', type: ddb.AttributeType.STRING },
   sortKey: { name: 'SK', type: ddb.AttributeType.STRING },
   billingMode: ddb.BillingMode.PAY_PER_REQUEST,
+  stream: ddb.StreamViewType.NEW_AND_OLD_IMAGES,   // feeds the event log (chapter 07)
   removalPolicy: cdk.RemovalPolicy.DESTROY,
 })
 // Sparse: only HELD holds carry gsi1pk, so the sweeper reads open holds and nothing else.
@@ -42,10 +44,10 @@ const env = {
   STOCKHOLD_EXPIRY_QUEUE: 'stockhold-hold-expiry',
   STOCKHOLD_PAYMENTS_QUEUE: 'stockhold-payment-events',
 }
-const fn = (id, handler, extra = {}) => {
+const fn = (id, handler, extra = {}, timeoutS = 30) => {
   const f = new lambda.Function(stack, id, {
     functionName: `stockhold-${id.toLowerCase()}`, runtime: lambda.Runtime.PYTHON_3_11, handler, code,
-    memorySize: 256, timeout: cdk.Duration.seconds(30), environment: { ...env, ...extra },
+    memorySize: 256, timeout: cdk.Duration.seconds(timeoutS), environment: { ...env, ...extra },
   })
   table.grantReadWriteData(f)
   return f
@@ -78,9 +80,22 @@ const paymentsQueue = new sqs.Queue(stack, 'PaymentsQueue', {
   visibilityTimeout: cdk.Duration.seconds(5),          // a failed attempt is retried 5 s later
   deadLetterQueue: { queue: paymentsDlq, maxReceiveCount: 3 },
 })
-const pay = fn('Payments', 'payments.handler')
+// Function timeout <= queue visibility timeout, or a slow attempt would be redelivered while still running.
+const pay = fn('Payments', 'payments.handler', {}, 5)
 pay.addEventSource(new SqsEventSource(paymentsQueue, { batchSize: 10, reportBatchItemFailures: true }))
 // @learn:end cdk-payments
+
+// @learn:cdk-eventlog
+const events_ = new s3.Bucket(stack, 'Events', {
+  bucketName: 'stockhold-events', removalPolicy: cdk.RemovalPolicy.DESTROY,
+})
+const eventlog = fn('Eventlog', 'eventlog.handler', { STOCKHOLD_EVENTS_BUCKET: events_.bucketName })
+events_.grantWrite(eventlog)
+eventlog.addEventSource(new DynamoEventSource(table, {
+  startingPosition: lambda.StartingPosition.TRIM_HORIZON, batchSize: 100, retryAttempts: 5,
+  maxBatchingWindow: cdk.Duration.seconds(1),
+}))
+// @learn:end cdk-eventlog
 
 new cdk.CfnOutput(stack, 'TableName', { value: table.tableName })
 new cdk.CfnOutput(stack, 'ExpiryQueueUrl', { value: expiryQueue.queueUrl })

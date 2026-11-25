@@ -2,7 +2,26 @@
 from __future__ import annotations
 
 import os
+import subprocess
 from dataclasses import dataclass, field
+from functools import lru_cache
+from pathlib import Path
+
+# The one place the GitHub account is written down. Everything else (learn page links, docs rendered
+# by the app) is built from REPO_URL; the markdown docs use relative paths.
+DEFAULT_REPO_URL = "https://github.com/suyi5179-collab/stockhold"
+
+
+@lru_cache(maxsize=1)
+def git_sha() -> str:
+    """GIT_SHA if set, else the commit this checkout is on; links are pinned to it, never to main."""
+    if os.environ.get("GIT_SHA"):
+        return os.environ["GIT_SHA"]
+    try:
+        return subprocess.run(["git", "rev-parse", "HEAD"], cwd=Path(__file__).resolve().parent, capture_output=True,
+                              text=True, check=True, timeout=5).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return "HEAD"
 
 
 def _env(name: str, default: str) -> str:
@@ -21,6 +40,7 @@ class Settings:
     # Signs API tokens and the ops tool's session cookie. The default is a dev placeholder.
     secret: str = field(default_factory=lambda: _env("STOCKHOLD_SECRET", "dev-only-placeholder-change-me-in-production"))
     token_ttl_seconds: int = field(default_factory=lambda: int(_env("STOCKHOLD_TOKEN_TTL", "3600")))
+    repo_url: str = field(default_factory=lambda: _env("REPO_URL", DEFAULT_REPO_URL).rstrip("/"))
     background: bool = field(default_factory=lambda: _env("STOCKHOLD_BACKGROUND", "0") == "1")
     expiry_queue: str = field(default_factory=lambda: _env("STOCKHOLD_EXPIRY_QUEUE", "stockhold-hold-expiry"))
     # The sweeper only touches holds this far past expiresAt: the delayed message gets the first chance.
