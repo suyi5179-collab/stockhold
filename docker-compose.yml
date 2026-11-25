@@ -1,0 +1,20 @@
+# LocalStack 4.9 is pinned: newer images require an auth token.
+name: stockhold
+services:
+  localstack:
+    image: localstack/localstack:4.9
+    ports: ["45671:4566"]
+    environment:
+      SERVICES: dynamodb,dynamodbstreams,sqs,lambda,s3,logs,iam,sts,events,cloudformation,ssm,cloudwatch
+      # Lambda containers join this compose network so they can reach Jaeger by name.
+      LAMBDA_DOCKER_NETWORK: stockhold_default
+      MAIN_CONTAINER_NAME: stockhold-localstack-1
+      LAMBDA_RUNTIME_ENVIRONMENT_TIMEOUT: "60"
+      DYNAMODB_IN_MEMORY: "1"
+    mem_limit: 1100m
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs localhost:4566/_localstack/health | grep -q '\"dynamodb\"'"]
+      interval: 3s
+      retries: 40
