@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from flask import Blueprint, jsonify, request
 
-from . import expiry, inventory
+from . import expiry, inventory, payments
 from .states import StockholdError, ValidationError
 
 bp = Blueprint("api", __name__, url_prefix="/v1")
@@ -82,3 +82,13 @@ def confirm(hold_id):
 def release(hold_id):
     r = inventory.release(hold_id, by="api", reason="client cancelled")
     return jsonify({**r["hold"], "changed": r["changed"]})
+
+
+@bp.post("/payments/events")
+def payment_event():
+    """What the payment provider's webhook would do: put the event on the payment-events queue."""
+    d = body()
+    if d.get("type") not in payments.TYPES or not d.get("hold_id"):
+        raise ValidationError("type must be payment_failed or payment_succeeded, and hold_id is required")
+    r = payments.publish(d["type"], str(d["hold_id"]), d.get("event_id"))
+    return jsonify(r), 202

@@ -16,6 +16,8 @@ class Settings:
         "AWS_ENDPOINT_URL", "" if os.environ.get("AWS_LAMBDA_FUNCTION_NAME") else "http://localhost:45671"))
     aws_region: str = field(default_factory=lambda: _env("AWS_REGION", "us-east-1"))
     table: str = field(default_factory=lambda: _env("STOCKHOLD_TABLE", "stockhold"))
+    payments_queue: str = field(default_factory=lambda: _env("STOCKHOLD_PAYMENTS_QUEUE", "stockhold-payment-events"))
+    payments_dlq: str = field(default_factory=lambda: _env("STOCKHOLD_PAYMENTS_DLQ", "stockhold-payment-events-dlq"))
     expiry_queue: str = field(default_factory=lambda: _env("STOCKHOLD_EXPIRY_QUEUE", "stockhold-hold-expiry"))
     # The sweeper only touches holds this far past expiresAt: the delayed message gets the first chance.
     sweep_grace_ms: int = field(default_factory=lambda: int(_env("STOCKHOLD_SWEEP_GRACE_MS", "5000")))

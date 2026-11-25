@@ -37,7 +37,11 @@ table.addGlobalSecondaryIndex({
 // @learn:end cdk-table
 
 const code = lambda.Code.fromAsset(path.join(here, '../build/lambda'))
-const env = { STOCKHOLD_TABLE: table.tableName, STOCKHOLD_EXPIRY_QUEUE: 'stockhold-hold-expiry' }
+const env = {
+  STOCKHOLD_TABLE: table.tableName,
+  STOCKHOLD_EXPIRY_QUEUE: 'stockhold-hold-expiry',
+  STOCKHOLD_PAYMENTS_QUEUE: 'stockhold-payment-events',
+}
 const fn = (id, handler, extra = {}) => {
   const f = new lambda.Function(stack, id, {
     functionName: `stockhold-${id.toLowerCase()}`, runtime: lambda.Runtime.PYTHON_3_11, handler, code,
@@ -64,6 +68,19 @@ new events.Rule(stack, 'SweepEveryMinute', {
   targets: [new targets.LambdaFunction(sweeper)],
 })
 // @learn:end cdk-expiry
+
+// @learn:cdk-payments
+const paymentsDlq = new sqs.Queue(stack, 'PaymentsDlq', {
+  queueName: 'stockhold-payment-events-dlq', retentionPeriod: cdk.Duration.days(14),
+})
+const paymentsQueue = new sqs.Queue(stack, 'PaymentsQueue', {
+  queueName: 'stockhold-payment-events',
+  visibilityTimeout: cdk.Duration.seconds(5),          // a failed attempt is retried 5 s later
+  deadLetterQueue: { queue: paymentsDlq, maxReceiveCount: 3 },
+})
+const pay = fn('Payments', 'payments.handler')
+pay.addEventSource(new SqsEventSource(paymentsQueue, { batchSize: 10, reportBatchItemFailures: true }))
+// @learn:end cdk-payments
 
 new cdk.CfnOutput(stack, 'TableName', { value: table.tableName })
 new cdk.CfnOutput(stack, 'ExpiryQueueUrl', { value: expiryQueue.queueUrl })
