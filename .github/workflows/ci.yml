@@ -4,7 +4,7 @@ on: [push, pull_request]
 jobs:
   checks:
     # No AWS needed: anchors, the problem-video sources, CDK synth, unit tests.
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04   # Playwright 1.57 (e2e/package.json) has no build for 26.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -21,7 +21,7 @@ jobs:
 
   integration:
     # The whole stack on LocalStack 4.9: deploy with cdklocal, run every test, the failure controls, then the UI.
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04   # Playwright 1.57 (e2e/package.json) has no build for 26.04
     timeout-minutes: 45
     env:
       COMPOSE: docker compose
