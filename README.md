@@ -4,7 +4,7 @@
 
 ![learn mode](docs/learn-preview.gif)
 
-▶ 中文讲解视频（每个阶段一段）：[docs/videos/](docs/videos/) · 完整版：[Release `learn-video`](../../releases/tag/learn-video) ·
+▶ 中文讲解视频（每个阶段一段，旁白是作者本人声音在本地克隆合成的）：[docs/videos/](docs/videos/) ·
 📖 [分章教程](docs/tutorial/README.md) · 🎯 [面试题](docs/interview.md) · 🛠 [日常问题与解决](docs/problems.md) · 📐 [设计文档](docs/design.md) · 📜 [API](docs/api.md)
 
 Everything runs locally with one command, no AWS account: DynamoDB (with Streams), SQS, Lambda, S3 and EventBridge are
